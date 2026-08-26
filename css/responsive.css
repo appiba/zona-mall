@@ -1,46 +1,100 @@
-@media (max-width: 720px) {
-    .setup-grid,
-    .segmented-list,
-    .activity-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .setup-view {
-      align-content: start;
-    }
-
-    .tracker-header {
-      grid-template-columns: 1fr auto;
-    }
-
-    #surveyorBadge {
-      grid-column: 1 / -1;
-      justify-self: start;
-    }
-
-    .stay-summary,
-    .panel-actions.two {
-      grid-template-columns: 1fr;
-    }
-
-    .activity-grid {
-      max-height: 250px;
-    }
-
-    .bottom-bar {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+@media (max-width: 860px) {
+  h1 {
+    font-size: 3.1rem;
   }
 
-  @media (orientation: landscape) and (max-height: 680px) {
-    .stay-panel {
-      left: auto;
-      width: min(420px, 42vw);
-      bottom: calc(66px + env(safe-area-inset-bottom));
-    }
-
-    .activity-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      max-height: 180px;
-    }
+  .setup-grid,
+  .segmented-list,
+  .activity-grid {
+    grid-template-columns: 1fr;
   }
+
+  .setup-view {
+    align-content: start;
+  }
+
+  .tracker-view {
+    min-height: 100dvh;
+    grid-template-rows: 76px minmax(0, 1fr) 124px;
+  }
+
+  .tracker-header {
+    align-content: center;
+  }
+
+  .tracker-header div {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  #personBadge,
+  #floorBadge,
+  #surveyorBadge,
+  #mainTimer {
+    padding: 6px 8px;
+    font-size: 0.84rem;
+  }
+
+  .map-stage {
+    padding: 10px;
+  }
+
+  #mapImage {
+    width: min(calc(100% - 18px), calc((100dvh - 214px) * 1.333333));
+    max-width: calc(100% - 18px);
+    max-height: calc(100dvh - 214px);
+  }
+
+  .map-controls {
+    top: 20px;
+    right: 20px;
+  }
+
+  .stay-summary,
+  .panel-actions.two,
+  .dialog-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-grid {
+    max-height: 250px;
+  }
+
+  .bottom-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 720px) {
+  .tracker-view {
+    grid-template-rows: 54px minmax(0, 1fr) 58px;
+  }
+
+  .tracker-header {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .bottom-bar {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .bottom-bar button,
+  .panel-actions button,
+  .activity-grid button,
+  .dialog-actions button {
+    min-height: 42px;
+  }
+
+  .stay-panel {
+    left: auto;
+    width: min(430px, 42vw);
+    bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+
+  .activity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 180px;
+  }
+}

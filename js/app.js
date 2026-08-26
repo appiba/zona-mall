@@ -145,9 +145,9 @@ const ACTIVITIES = [
     els.startStayBtn.addEventListener('click', startStayFromLastPoint);
     els.pauseFollowBtn.addEventListener('click', markFollowPause);
     els.manualPauseBtn.addEventListener('click', markManualPause);
-    els.manualEventBtn.addEventListener('click', () => els.eventDialog.showModal());
+    els.manualEventBtn.addEventListener('click', () => openDialog(els.eventDialog));
     els.saveManualEventBtn.addEventListener('click', saveManualEvent);
-    els.changeFloorBtn.addEventListener('click', () => els.floorDialog.showModal());
+    els.changeFloorBtn.addEventListener('click', () => openDialog(els.floorDialog));
     els.finishBtn.addEventListener('click', finishTracking);
     els.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.2));
     els.zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.2));
@@ -175,8 +175,8 @@ const ACTIVITIES = [
         updateFloorButtonStates();
       });
       const dialogButton = buildFloorButton(map, () => {
+        closeDialog(els.floorDialog);
         changeFloor(map.id);
-        els.floorDialog.close();
       });
       els.initialFloorOptions.append(setupButton);
       els.floorDialogOptions.append(dialogButton);
@@ -306,6 +306,7 @@ const ACTIVITIES = [
       observacion: `${getFloorLabel(previous)} -> ${getFloorLabel(nextFloor)}`
     });
     flushEvents();
+    state.lastPoint = null;
     loadFloor(nextFloor);
   }
 
@@ -579,7 +580,7 @@ const ACTIVITIES = [
       observacion: els.manualEventObservation.value
     });
     els.manualEventObservation.value = '';
-    els.eventDialog.close();
+    closeDialog(els.eventDialog);
     flushEvents();
   }
 
@@ -913,6 +914,28 @@ const ACTIVITIES = [
 
   function hideMapMessage() {
     els.mapMessage.classList.add('hidden');
+  }
+
+  function openDialog(dialog) {
+    if (!dialog || dialog.open) {
+      return;
+    }
+    try {
+      dialog.showModal();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  function closeDialog(dialog) {
+    if (!dialog || !dialog.open) {
+      return;
+    }
+    try {
+      dialog.close();
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   function cryptoRandomId() {
