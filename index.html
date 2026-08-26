@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zonar Mall</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section id="setupView" class="setup-view">
+      <header class="setup-header">
+        <p class="eyebrow">Mapa de permanencia</p>
+        <h1 id="appName">Zonar Mall</h1>
+        <p class="setup-subtitle">Captura de recorridos y permanencias</p>
+      </header>
+
+      <form id="setupForm" class="setup-grid">
+        <label class="field">
+          Encuestador
+          <select id="surveyorSelect" required></select>
+        </label>
+
+        <label class="field">
+          Edad
+          <select id="ageSelect" required>
+            <option value="18-24">18-24</option>
+            <option value="25-34">25-34</option>
+            <option value="35-44">35-44</option>
+            <option value="45-54">45-54</option>
+            <option value="55+">55+</option>
+          </select>
+        </label>
+
+        <label class="field">
+          Genero
+          <select id="genderSelect" required>
+            <option value="FEMENINO">Femenino</option>
+            <option value="MASCULINO">Masculino</option>
+            <option value="OTRO">Otro</option>
+            <option value="NO_RESPONDE">No responde</option>
+          </select>
+        </label>
+
+        <label class="field">
+          Procedencia
+          <select id="originSelect" required>
+            <option value="LOCAL">Local</option>
+            <option value="NACIONAL">Nacional</option>
+            <option value="EXTRANJERO">Extranjero</option>
+            <option value="NO_RESPONDE">No responde</option>
+          </select>
+        </label>
+
+        <label class="field">
+          Tipo de visita
+          <select id="visitTypeSelect" required>
+            <option value="COMPRAS">Compras</option>
+            <option value="COMIDA">Comida</option>
+            <option value="SERVICIOS">Servicios</option>
+            <option value="ENTRETENIMIENTO">Entretenimiento</option>
+            <option value="TRANSITO">Transito</option>
+            <option value="OTRO">Otro</option>
+          </select>
+        </label>
+
+        <fieldset class="floor-picker">
+          <legend>Piso inicial</legend>
+          <div id="initialFloorOptions" class="segmented-list"></div>
+        </fieldset>
+
+        <button class="primary-action" type="submit">Iniciar recorrido</button>
+      </form>
+    </section>
+
+    <section id="trackerView" class="tracker-view hidden">
+      <header class="tracker-header">
+        <div>
+          <strong id="personBadge">P0000</strong>
+          <span id="floorBadge">Piso</span>
+          <span id="surveyorBadge">E00</span>
+        </div>
+        <time id="mainTimer" datetime="PT0S">00:00:00</time>
+      </header>
+
+      <section class="map-stage" aria-label="Mapa de recorrido">
+        <div id="mapViewport" class="map-viewport">
+          <img id="mapImage" alt="Mapa del centro comercial">
+          <canvas id="drawCanvas"></canvas>
+          <div id="stayMarker" class="stay-marker hidden"></div>
+          <div id="mapMessage" class="map-message hidden"></div>
+        </div>
+
+        <div class="map-controls" aria-label="Controles de zoom">
+          <button id="zoomOutBtn" class="icon-button" type="button" title="Alejar">-</button>
+          <button id="zoomResetBtn" class="icon-button" type="button" title="Restablecer zoom">1x</button>
+          <button id="zoomInBtn" class="icon-button" type="button" title="Acercar">+</button>
+        </div>
+      </section>
+
+      <aside id="liftPanel" class="action-panel hidden">
+        <p>Segmento terminado</p>
+        <div class="panel-actions two">
+          <button id="startStayBtn" type="button">Registrar permanencia</button>
+          <button id="pauseFollowBtn" type="button">Continuar luego</button>
+        </div>
+      </aside>
+
+      <aside id="stayPanel" class="stay-panel hidden">
+        <div class="stay-summary">
+          <div>
+            <span>Tiempo</span>
+            <strong id="stayTimer">00:00</strong>
+          </div>
+          <div>
+            <span>Ubicacion</span>
+            <strong id="detectedLocation">Sin local asociado</strong>
+          </div>
+        </div>
+        <div id="activityButtons" class="activity-grid"></div>
+      </aside>
+
+      <nav class="bottom-bar" aria-label="Acciones del recorrido">
+        <button id="manualPauseBtn" type="button">Pausa</button>
+        <button id="manualEventBtn" type="button">Evento</button>
+        <button id="changeFloorBtn" type="button">Piso</button>
+        <button id="finishBtn" class="danger-action" type="button">Finalizar</button>
+      </nav>
+    </section>
+  </main>
+
+  <dialog id="floorDialog" class="modal">
+    <form method="dialog">
+      <h2>Cambiar piso</h2>
+      <div id="floorDialogOptions" class="segmented-list"></div>
+      <div class="dialog-actions">
+        <button type="submit">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="eventDialog" class="modal">
+    <form method="dialog">
+      <h2>Evento manual</h2>
+      <label class="field">
+        Actividad
+        <select id="manualEventSelect"></select>
+      </label>
+      <label class="field">
+        Observacion
+        <textarea id="manualEventObservation" rows="3"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button type="submit">Cancelar</button>
+        <button id="saveManualEventBtn" type="button">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
