@@ -71,6 +71,7 @@ input:focus-visible {
 }
 
 .setup-header,
+.setup-status,
 .setup-grid {
   width: min(100%, 980px);
   margin: 0 auto;
@@ -118,12 +119,46 @@ h1 {
   box-shadow: var(--shadow);
 }
 
+.setup-status {
+  margin-top: -8px;
+  padding: 11px 13px;
+  border: 1px solid rgba(185, 130, 24, 0.32);
+  border-radius: 8px;
+  background: #fff9ec;
+  color: var(--amber);
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
 .field {
   display: grid;
   gap: 7px;
   color: var(--muted);
   font-size: 0.88rem;
   font-weight: 800;
+}
+
+.surveyor-quick-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.surveyor-quick-options button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8faf8;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.surveyor-quick-options button.active {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #ffffff;
 }
 
 select,

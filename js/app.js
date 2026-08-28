@@ -38,6 +38,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     stayTimerId: null,
     toastTimerId: null,
     floorSwitcherTimerId: null,
+    floorSwitcherOpen: false,
     zoom: 1,
     pan: { x: 0, y: 0 },
     pinch: null,
@@ -52,11 +53,16 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
   function boot() {
     cacheElements();
     bindStaticEvents();
+    loadLocalDefaults();
     renderActivityButtons();
+    renderSurveyors([]);
+    renderFloorButtons();
+    renderManualEventOptions();
+    renderLocationOptions();
     callServer('initApp')
       .then((app) => {
         state.app = app;
-        state.maps = (window.ZonarConfig.maps || app.maps || []).map((map) => ({ ...map }));
+        state.maps = (app.maps && app.maps.length ? app.maps : window.ZonarConfig.maps || []).map((map) => ({ ...map }));
         state.zones = normalizeZones(app.zonas || []);
         state.locales = [
           ...(app.locales || []),
@@ -66,15 +72,24 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         state.config = app.config || {};
         document.title = app.appName || 'Zonar Mall';
         els.appName.textContent = app.appName || 'Zonar Mall';
+        hideSetupStatus();
         renderSurveyors(app.encuestadores || []);
         renderFloorButtons();
         renderManualEventOptions();
         renderLocationOptions();
       })
       .catch((error) => {
-        showMapMessage('No se pudo iniciar la aplicacion. Revisa la conexion con Google Apps Script.');
+        showSetupStatus('No se pudo conectar con Google en este momento. Puedes escoger el encuestador y el piso, pero revisa internet antes de iniciar.');
         console.error(error);
       });
+  }
+
+  function loadLocalDefaults() {
+    state.maps = (window.ZonarConfig.maps || []).map((map) => ({ ...map }));
+    state.zones = [];
+    state.locales = [...(window.ZonarConfig.knownLocations || [])];
+    state.locationPoints = normalizeLocationPoints(window.ZonarConfig.locationPoints || {});
+    state.config = {};
   }
 
   function cacheElements() {
@@ -82,8 +97,11 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       'setupView',
       'trackerView',
       'setupForm',
+      'setupStatus',
       'appName',
       'surveyorSelect',
+      'surveyorOptions',
+      'surveyorQuickOptions',
       'ageSelect',
       'genderSelect',
       'originSelect',
@@ -154,6 +172,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       if (state.lastPoint) {
         updateLiveLocation(state.lastPoint);
       }
+      syncFloorSwitcherMode();
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && state.isDrawing) {
@@ -172,18 +191,50 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.2));
     els.zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.2));
     els.zoomResetBtn.addEventListener('click', () => setZoom(1));
+    els.surveyorSelect.addEventListener('input', updateSurveyorButtonStates);
     els.stayLocationInput.addEventListener('input', updateStayLocationDisplay);
     setInterval(flushAll, getNumberConfig('AUTO_SAVE_INTERVAL', 5000));
   }
 
   function renderSurveyors(surveyors) {
-    els.surveyorSelect.innerHTML = '';
     const list = surveyors.length ? surveyors : ['E01', 'E02', 'E03', 'E04', 'E05', 'E06'].map((codigo) => ({ codigo, nombre: codigo }));
+    const current = String(els.surveyorSelect.value || '').trim();
+    els.surveyorOptions.innerHTML = '';
+    els.surveyorQuickOptions.innerHTML = '';
     list.forEach((surveyor) => {
+      const code = String(surveyor.codigo || surveyor.nombre || '').trim();
+      if (!code) {
+        return;
+      }
       const option = document.createElement('option');
-      option.value = surveyor.codigo;
-      option.textContent = surveyor.codigo;
-      els.surveyorSelect.append(option);
+      option.value = code;
+      option.label = surveyor.nombre && surveyor.nombre !== surveyor.codigo
+        ? surveyor.nombre
+        : code;
+      els.surveyorOptions.append(option);
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.surveyor = code;
+      button.textContent = code;
+      button.addEventListener('click', () => {
+        els.surveyorSelect.value = code;
+        updateSurveyorButtonStates();
+      });
+      els.surveyorQuickOptions.append(button);
+    });
+    if (!current && list[0]) {
+      els.surveyorSelect.value = String(list[0].codigo || list[0].nombre || '').trim();
+    }
+    updateSurveyorButtonStates();
+  }
+
+  function updateSurveyorButtonStates() {
+    const current = String(els.surveyorSelect.value || '').trim().toUpperCase();
+    els.surveyorQuickOptions.querySelectorAll('button').forEach((button) => {
+      const active = button.dataset.surveyor.toUpperCase() === current;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
   }
 
@@ -231,10 +282,30 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       return;
     }
     window.clearTimeout(state.floorSwitcherTimerId);
+    if (isCompactViewport()) {
+      state.floorSwitcherOpen = !state.floorSwitcherOpen;
+      els.floorSwitchPanel.classList.toggle('open', state.floorSwitcherOpen);
+      els.changeFloorBtn.setAttribute('aria-expanded', state.floorSwitcherOpen ? 'true' : 'false');
+      return;
+    }
     els.floorSwitchPanel.classList.add('attention');
-    state.floorSwitcherTimerId = window.setTimeout(() => {
-      els.floorSwitchPanel.classList.remove('attention');
-    }, 1400);
+    state.floorSwitcherTimerId = window.setTimeout(closeFloorSwitcher, 1400);
+  }
+
+  function closeFloorSwitcher() {
+    state.floorSwitcherOpen = false;
+    els.floorSwitchPanel.classList.remove('open', 'attention');
+    els.changeFloorBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function syncFloorSwitcherMode() {
+    if (!isCompactViewport()) {
+      closeFloorSwitcher();
+    }
+  }
+
+  function isCompactViewport() {
+    return window.matchMedia('(max-width: 860px)').matches;
   }
 
   function renderManualEventOptions() {
@@ -304,8 +375,15 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     if (!state.selectedFloor) {
       return;
     }
+    const surveyor = String(els.surveyorSelect.value || '').trim();
+    if (!surveyor) {
+      els.surveyorSelect.focus();
+      els.surveyorSelect.reportValidity();
+      return;
+    }
+    hideSetupStatus();
     const payload = {
-      encuestador: els.surveyorSelect.value,
+      encuestador: surveyor,
       edad_rango: els.ageSelect.value,
       genero: els.genderSelect.value,
       procedencia: els.originSelect.value,
@@ -332,7 +410,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       })
       .catch((error) => {
         console.error(error);
-        alert('No se pudo crear la persona. Intenta nuevamente.');
+        showSetupStatus('No se pudo iniciar el recorrido. Revisa internet y vuelve a tocar Iniciar recorrido.');
       });
   }
 
@@ -373,7 +451,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     if (!state.current || nextFloor === state.selectedFloor) {
       return;
     }
-    els.floorSwitchPanel.classList.remove('attention');
+    closeFloorSwitcher();
     if (state.stay) {
       finishStay();
     }
@@ -405,6 +483,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     event.preventDefault();
     els.mapViewport.setPointerCapture(event.pointerId);
     hideLiftPanel();
+    closeFloorSwitcher();
     hideLiveLocationBadge();
     state.isDrawing = true;
     state.activePointerId = event.pointerId;
@@ -1184,6 +1263,16 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     state.toastTimerId = window.setTimeout(() => {
       els.toastMessage.classList.add('hidden');
     }, 2400);
+  }
+
+  function showSetupStatus(message) {
+    els.setupStatus.textContent = message;
+    els.setupStatus.classList.remove('hidden');
+  }
+
+  function hideSetupStatus() {
+    els.setupStatus.textContent = '';
+    els.setupStatus.classList.add('hidden');
   }
 
   function showMapMessage(message) {

@@ -17,10 +17,14 @@
         <a class="admin-link" href="admin.html">Panel administrador</a>
       </header>
 
+      <div id="setupStatus" class="setup-status hidden" aria-live="polite"></div>
+
       <form id="setupForm" class="setup-grid">
         <label class="field">
           Encuestador
-          <select id="surveyorSelect" required></select>
+          <input id="surveyorSelect" list="surveyorOptions" type="text" autocomplete="off" placeholder="E01 o nombre" required>
+          <datalist id="surveyorOptions"></datalist>
+          <div id="surveyorQuickOptions" class="surveyor-quick-options" aria-label="Encuestadores rapidos"></div>
         </label>
 
         <label class="field">
@@ -144,7 +148,7 @@
       <nav class="bottom-bar" aria-label="Acciones del recorrido">
         <button id="manualPauseBtn" type="button">Pausa</button>
         <button id="manualEventBtn" type="button">Evento</button>
-        <button id="changeFloorBtn" type="button">Piso</button>
+        <button id="changeFloorBtn" type="button" aria-expanded="false" aria-controls="floorSwitchPanel">Piso</button>
         <button id="finishBtn" class="danger-action" type="button">Finalizar</button>
       </nav>
     </section>
