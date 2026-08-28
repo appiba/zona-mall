@@ -7,7 +7,24 @@
   <link rel="stylesheet" href="css/admin.css">
 </head>
 <body>
-  <main class="admin-shell">
+  <section id="loginView" class="login-screen" aria-label="Acceso administrador">
+    <form id="loginForm" class="login-card">
+      <p class="eyebrow">Acceso privado</p>
+      <h1>Zonar Mall</h1>
+      <p class="login-copy">Ingresa con el usuario administrador para revisar resultados, mapas de calor e informes.</p>
+
+      <label for="adminUserInput">Usuario</label>
+      <input id="adminUserInput" type="text" autocomplete="username" required>
+
+      <label for="adminPassInput">Clave</label>
+      <input id="adminPassInput" type="password" autocomplete="current-password" required>
+
+      <p id="loginError" class="login-error" aria-live="polite"></p>
+      <button id="loginSubmitBtn" type="submit">Entrar al panel</button>
+    </form>
+  </section>
+
+  <main id="adminShell" class="admin-shell hidden" aria-hidden="true">
     <header class="admin-header">
       <div>
         <a class="back-link" href="index.html">Captura</a>
@@ -18,6 +35,7 @@
       <div class="header-actions">
         <button id="refreshBtn" type="button">Actualizar</button>
         <button id="printBtn" type="button">Informe</button>
+        <button id="logoutBtn" type="button">Salir</button>
       </div>
     </header>
 

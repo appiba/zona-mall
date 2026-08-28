@@ -1,7 +1,15 @@
 (function () {
+  const ADMIN_AUTH = {
+    sessionKey: 'zonarMallAdminSession',
+    maxAgeMs: 8 * 60 * 60 * 1000,
+    usernameHash: 'daff9c7f4b63b9fd17e84f3c8ac13fe5f2104e4829fb8ed103b8c46e75d738f3',
+    credentialHash: '55f071bc1a69f9cc3714e2a49fe5283a429a6be4e47f2be4031a1cfb9017610a'
+  };
+
   const state = {
     data: null,
-    selectedFloorId: null
+    selectedFloorId: null,
+    authenticated: false
   };
 
   const els = {};
@@ -28,19 +36,123 @@
       'floorReports',
       'refreshBtn',
       'printBtn',
-      'reportSubtitle'
+      'logoutBtn',
+      'reportSubtitle',
+      'loginView',
+      'adminShell',
+      'loginForm',
+      'adminUserInput',
+      'adminPassInput',
+      'loginError',
+      'loginSubmitBtn'
     ].forEach((id) => {
       els[id] = document.getElementById(id);
     });
 
+    els.loginForm.addEventListener('submit', handleLogin);
+    els.logoutBtn.addEventListener('click', () => showLogin(true));
     els.refreshBtn.addEventListener('click', loadDashboard);
     els.printBtn.addEventListener('click', () => window.print());
     els.adminMapImage.addEventListener('load', renderHeatmap);
     window.addEventListener('resize', renderHeatmap);
+    if (hasValidAdminSession()) {
+      unlockAdmin();
+    } else {
+      showLogin(false);
+    }
+  }
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    setLoginError('');
+    els.loginSubmitBtn.disabled = true;
+    els.loginSubmitBtn.textContent = 'Verificando...';
+
+    try {
+      const username = normalizeAdminUser(els.adminUserInput.value);
+      const password = String(els.adminPassInput.value || '');
+      const userHash = await digestText(username);
+      const credentialHash = await digestText(`${username}:${password}`);
+      if (userHash !== ADMIN_AUTH.usernameHash || credentialHash !== ADMIN_AUTH.credentialHash) {
+        throw new Error('Credenciales invalidas');
+      }
+      sessionStorage.setItem(ADMIN_AUTH.sessionKey, JSON.stringify({
+        userHash,
+        signedInAt: Date.now()
+      }));
+      els.adminPassInput.value = '';
+      unlockAdmin();
+    } catch (error) {
+      if (!error || error.message !== 'Credenciales invalidas') {
+        console.error(error);
+      }
+      setLoginError('Usuario o clave incorrectos.');
+      els.adminPassInput.select();
+    } finally {
+      els.loginSubmitBtn.disabled = false;
+      els.loginSubmitBtn.textContent = 'Entrar al panel';
+    }
+  }
+
+  function hasValidAdminSession() {
+    try {
+      const raw = sessionStorage.getItem(ADMIN_AUTH.sessionKey);
+      if (!raw) {
+        return false;
+      }
+      const session = JSON.parse(raw);
+      const age = Date.now() - Number(session.signedInAt || 0);
+      return session.userHash === ADMIN_AUTH.usernameHash && age >= 0 && age <= ADMIN_AUTH.maxAgeMs;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function unlockAdmin() {
+    state.authenticated = true;
+    els.loginView.classList.add('hidden');
+    els.adminShell.classList.remove('hidden');
+    els.adminShell.removeAttribute('aria-hidden');
     loadDashboard();
   }
 
+  function showLogin(clearSession) {
+    if (clearSession) {
+      sessionStorage.removeItem(ADMIN_AUTH.sessionKey);
+    }
+    state.authenticated = false;
+    state.data = null;
+    state.selectedFloorId = null;
+    els.adminShell.classList.add('hidden');
+    els.adminShell.setAttribute('aria-hidden', 'true');
+    els.loginView.classList.remove('hidden');
+    setLoginError('');
+    window.requestAnimationFrame(() => els.adminUserInput.focus());
+  }
+
+  function normalizeAdminUser(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  async function digestText(value) {
+    if (!window.crypto || !window.crypto.subtle) {
+      throw new Error('Este navegador no puede validar el acceso administrador.');
+    }
+    const encoded = new TextEncoder().encode(value);
+    const buffer = await window.crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(buffer))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  function setLoginError(message) {
+    els.loginError.textContent = message;
+  }
+
   function loadDashboard() {
+    if (!state.authenticated) {
+      return;
+    }
     setStatus('Cargando resultados...');
     window.ZonarAPI.call('getDashboardData', {})
       .then((data) => {
