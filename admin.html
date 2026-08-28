@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zonar Mall | Panel administrador</title>
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <main class="admin-shell">
+    <header class="admin-header">
+      <div>
+        <a class="back-link" href="index.html">Captura</a>
+        <p class="eyebrow">Panel administrador</p>
+        <h1>Zonar Mall</h1>
+        <p id="reportSubtitle">Resultados de permanencia por planta y parqueaderos</p>
+      </div>
+      <div class="header-actions">
+        <button id="refreshBtn" type="button">Actualizar</button>
+        <button id="printBtn" type="button">Informe</button>
+      </div>
+    </header>
+
+    <section id="statusBanner" class="status-banner">Cargando resultados...</section>
+
+    <section class="metric-grid" aria-label="Indicadores generales">
+      <article>
+        <span>Visitantes capturados</span>
+        <strong id="visitorsMetric">0</strong>
+      </article>
+      <article>
+        <span>Permanencias</span>
+        <strong id="staysMetric">0</strong>
+      </article>
+      <article>
+        <span>Tiempo acumulado</span>
+        <strong id="timeMetric">0 s</strong>
+      </article>
+      <article>
+        <span>Interacciones</span>
+        <strong id="interactionsMetric">0</strong>
+      </article>
+    </section>
+
+    <section class="dashboard-grid">
+      <section class="map-panel" aria-label="Mapa de calor">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Mapa de calor</p>
+            <h2 id="selectedFloorTitle">Planta</h2>
+          </div>
+          <div id="floorTabs" class="floor-tabs"></div>
+        </div>
+
+        <div class="heatmap-frame">
+          <img id="adminMapImage" alt="Mapa analitico">
+          <canvas id="heatmapCanvas"></canvas>
+          <div id="poiLabels" class="poi-labels"></div>
+        </div>
+
+        <div class="legend-row">
+          <span>Baja permanencia</span>
+          <div class="heat-legend"></div>
+          <span>Alta permanencia</span>
+        </div>
+        <div id="activityLegend" class="activity-legend"></div>
+      </section>
+
+      <aside class="insight-panel" aria-label="Puntos de interes">
+        <div class="panel-heading compact">
+          <div>
+            <p class="eyebrow">Prioridad comercial</p>
+            <h2>Puntos de interes</h2>
+          </div>
+        </div>
+        <ol id="poiList" class="poi-list"></ol>
+      </aside>
+    </section>
+
+    <section class="analysis-grid">
+      <section>
+        <div class="panel-heading compact">
+          <div>
+            <p class="eyebrow">Comparativo</p>
+            <h2>Plantas y parqueaderos</h2>
+          </div>
+        </div>
+        <div id="floorBars" class="bar-chart"></div>
+      </section>
+
+      <section>
+        <div class="panel-heading compact">
+          <div>
+            <p class="eyebrow">Comportamiento</p>
+            <h2>Actividades principales</h2>
+          </div>
+        </div>
+        <div id="activityBars" class="bar-chart"></div>
+      </section>
+    </section>
+
+    <section class="report-panel">
+      <div class="panel-heading compact">
+        <div>
+          <p class="eyebrow">Informe automatico</p>
+          <h2>Conclusiones</h2>
+        </div>
+      </div>
+      <ul id="conclusionList" class="conclusion-list"></ul>
+    </section>
+
+    <section class="report-panel">
+      <div class="panel-heading compact">
+        <div>
+          <p class="eyebrow">Detalle operativo</p>
+          <h2>Resumen por planta y parqueadero</h2>
+        </div>
+      </div>
+      <div id="floorReports" class="floor-reports"></div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/activity-meta.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

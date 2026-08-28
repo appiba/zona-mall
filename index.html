@@ -14,6 +14,7 @@
         <p class="eyebrow">Mapa de permanencia</p>
         <h1 id="appName">Zonar Mall</h1>
         <p class="setup-subtitle">Captura de recorridos y permanencias</p>
+        <a class="admin-link" href="admin.html">Panel administrador</a>
       </header>
 
       <form id="setupForm" class="setup-grid">
@@ -116,6 +117,8 @@
           <div>
             <span>Ubicacion</span>
             <strong id="detectedLocation">Sin local asociado</strong>
+            <input id="stayLocationInput" class="stay-location-input" list="locationDatalist" type="text" placeholder="Local o lugar cercano">
+            <datalist id="locationDatalist"></datalist>
           </div>
         </div>
         <div id="activityButtons" class="activity-grid"></div>
@@ -159,6 +162,7 @@
   </dialog>
 
   <script src="js/config.js"></script>
+  <script src="js/activity-meta.js"></script>
   <script src="js/api.js"></script>
   <script src="js/app.js"></script>
 </body>

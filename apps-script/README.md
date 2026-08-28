@@ -7,6 +7,7 @@ La interfaz ya no depende de `HtmlService`; GitHub Pages llama este backend medi
 Funciones principales:
 
 - `initApp`
+- `getDashboardData`
 - `createPerson`
 - `saveRoutePoints`
 - `savePermanencia`
@@ -14,6 +15,8 @@ Funciones principales:
 - `recordFloorChange`
 - `finalizePerson`
 - `ensureDatabase`
+
+La implementacion web activa fue actualizada a la version 4 el 28 ago 2026 y conserva el mismo ID de despliegue.
 
 La hoja de calculo conectada es:
 

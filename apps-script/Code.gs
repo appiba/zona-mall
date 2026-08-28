@@ -160,6 +160,7 @@ function dispatchApiAction_(action, payload) {
     saveEvents: () => saveEvents(payload),
     recordFloorChange: () => recordFloorChange(payload),
     finalizePerson: () => finalizePerson(payload),
+    getDashboardData: () => getDashboardData(payload),
     getMapData: () => getMapData(payload),
     syncMapFileIdsByName: () => syncMapFileIdsByName(),
     configureProvidedMapFiles: () => configureProvidedMapFiles()
@@ -198,6 +199,38 @@ function initApp() {
     locales: getActiveRows_('LOCALES'),
     simbologia: getActiveRows_('SIMBOLOGIA'),
     nextPersonaId: peekNextPersonaId_()
+  };
+}
+
+function getDashboardData(payload) {
+  ensureDatabase();
+  const config = getConfigObject_();
+  const maps = getMapCatalog_(config).map((map) => ({
+    id: map.id,
+    label: map.label
+  }));
+  const personas = getRows_('PERSONAS');
+  const recorridos = getRows_('RECORRIDOS');
+  const permanencias = getRows_('PERMANENCIAS').filter((row) => (
+    isFinite(Number(row.x)) &&
+    isFinite(Number(row.y)) &&
+    row.persona_id
+  ));
+  const eventos = getRows_('EVENTOS');
+  const permanenciaById = {};
+  permanencias.forEach((row) => {
+    permanenciaById[row.permanencia_id] = row;
+  });
+
+  const floors = maps.map((map) => buildFloorDashboard_(map, permanencias, eventos, permanenciaById));
+  const totals = buildDashboardTotals_(personas, recorridos, permanencias, eventos, floors);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    appName: config.APP_NAME || APP_NAME,
+    totals,
+    floors,
+    conclusions: buildDashboardConclusions_(totals, floors)
   };
 }
 
@@ -473,6 +506,250 @@ function getMapCatalog_(config) {
   ];
 }
 
+function buildFloorDashboard_(map, permanencias, eventos, permanenciaById) {
+  const floorStays = permanencias.filter((row) => row.piso === map.id);
+  const floorStayIds = new Set(floorStays.map((row) => row.permanencia_id));
+  const floorEvents = eventos.filter((event) => {
+    if (event.permanencia_id && floorStayIds.has(event.permanencia_id)) {
+      return true;
+    }
+    const related = permanenciaById[event.permanencia_id];
+    return related && related.piso === map.id;
+  });
+  const eventsByStay = buildEventsByStay_(floorEvents);
+  const poiGroups = groupPointsOfInterest_(floorStays, eventsByStay);
+  const activities = groupActivities_(floorEvents);
+  const uniqueVisitors = uniqueCount_(floorStays.map((row) => row.persona_id));
+  const totalSeconds = sum_(floorStays, 'duracion_segundos');
+  const avgSeconds = floorStays.length ? Math.round(totalSeconds / floorStays.length) : 0;
+
+  return {
+    id: map.id,
+    label: map.label,
+    metrics: {
+      visitors: uniqueVisitors,
+      stays: floorStays.length,
+      totalSeconds,
+      avgSeconds,
+      interactions: floorEvents.length
+    },
+    heatPoints: floorStays.map((row) => {
+      const activityCounts = countActivities_(eventsByStay[row.permanencia_id] || []);
+      const topActivity = topEntry_(activityCounts);
+      return {
+        permanencia_id: row.permanencia_id,
+        persona_id: row.persona_id,
+        x: normalizedNumber_(row.x),
+        y: normalizedNumber_(row.y),
+        weight: Math.max(1, Number(row.duracion_segundos || 0)),
+        seconds: Number(row.duracion_segundos || 0),
+        local_codigo: row.local_codigo || '',
+        local_nombre: row.local_nombre || '',
+        clasificacion: row.clasificacion || '',
+        topActivity: topActivity ? topActivity.name : '',
+        activities: activityBreakdown_(activityCounts)
+      };
+    }),
+    pointsOfInterest: poiGroups.slice(0, 8),
+    activities,
+    conclusion: buildFloorConclusion_(map.label, floorStays.length, uniqueVisitors, totalSeconds, poiGroups)
+  };
+}
+
+function buildDashboardTotals_(personas, recorridos, permanencias, eventos, floors) {
+  const totalSeconds = sum_(permanencias, 'duracion_segundos');
+  return {
+    visitors: uniqueCount_(personas.map((row) => row.persona_id).filter(Boolean)),
+    trackedVisitors: uniqueCount_(permanencias.map((row) => row.persona_id).filter(Boolean)),
+    completedRoutes: recorridos.filter((row) => String(row.estado || '').toUpperCase() === 'FINALIZADO').length,
+    stays: permanencias.length,
+    totalSeconds,
+    avgStaySeconds: permanencias.length ? Math.round(totalSeconds / permanencias.length) : 0,
+    interactions: eventos.length,
+    floorsWithData: floors.filter((floor) => floor.metrics.stays > 0).length
+  };
+}
+
+function buildEventsByStay_(events) {
+  const eventsByStay = {};
+  events.forEach((event) => {
+    if (!event.permanencia_id) return;
+    if (!eventsByStay[event.permanencia_id]) {
+      eventsByStay[event.permanencia_id] = [];
+    }
+    eventsByStay[event.permanencia_id].push(event);
+  });
+  return eventsByStay;
+}
+
+function groupPointsOfInterest_(stays, eventsByStay) {
+  const groups = {};
+  stays.forEach((stay) => {
+    const localName = String(stay.local_nombre || '').trim();
+    const localCode = String(stay.local_codigo || '').trim();
+    const hasLocal = Boolean(localName || localCode);
+    const x = normalizedNumber_(stay.x);
+    const y = normalizedNumber_(stay.y);
+    const key = hasLocal
+      ? `local:${localCode}:${localName}`
+      : `grid:${Math.round(x * 14)}:${Math.round(y * 14)}`;
+    if (!groups[key]) {
+      groups[key] = {
+        key,
+        label: hasLocal ? localName || localCode : '',
+        code: localCode,
+        x: 0,
+        y: 0,
+        stays: 0,
+        visitors: {},
+        totalSeconds: 0,
+        weightSum: 0,
+        interactions: 0,
+        activityCounts: {}
+      };
+    }
+    const group = groups[key];
+    const seconds = Number(stay.duracion_segundos || 0);
+    const pointWeight = Math.max(1, seconds);
+    group.x += x * pointWeight;
+    group.y += y * pointWeight;
+    group.weightSum += pointWeight;
+    group.stays += 1;
+    group.visitors[stay.persona_id] = true;
+    group.totalSeconds += seconds;
+    (eventsByStay[stay.permanencia_id] || []).forEach((event) => {
+      group.interactions += 1;
+      const activity = event.actividad || 'SIN_ACTIVIDAD';
+      group.activityCounts[activity] = (group.activityCounts[activity] || 0) + 1;
+    });
+  });
+
+  return Object.keys(groups).map((key, index) => {
+    const group = groups[key];
+    const weight = Math.max(1, group.weightSum);
+    const activity = topEntry_(group.activityCounts);
+    const visitors = Object.keys(group.visitors).length;
+    const label = group.label || `Zona caliente ${String(index + 1).padStart(2, '0')}`;
+    return {
+      label,
+      code: group.code,
+      x: normalizedNumber_(group.x / weight),
+      y: normalizedNumber_(group.y / weight),
+      stays: group.stays,
+      visitors,
+      totalSeconds: group.totalSeconds,
+      avgSeconds: group.stays ? Math.round(group.totalSeconds / group.stays) : 0,
+      interactions: group.interactions,
+      topActivity: activity ? activity.name : '',
+      activities: activityBreakdown_(group.activityCounts),
+      score: Math.round((visitors * 40) + (group.stays * 24) + group.totalSeconds + (group.interactions * 12))
+    };
+  }).sort((a, b) => b.score - a.score);
+}
+
+function groupActivities_(events) {
+  const counts = countActivities_(events);
+  return activityBreakdown_(counts).slice(0, 8);
+}
+
+function countActivities_(events) {
+  const counts = {};
+  events.forEach((event) => {
+    const activity = event.actividad || 'SIN_ACTIVIDAD';
+    counts[activity] = (counts[activity] || 0) + 1;
+  });
+  return counts;
+}
+
+function activityBreakdown_(counts) {
+  return Object.keys(counts)
+    .map((name) => ({ name, count: counts[name] }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function buildDashboardConclusions_(totals, floors) {
+  const withData = floors.filter((floor) => floor.metrics.stays > 0);
+  if (!withData.length) {
+    return [
+      'Todavia no hay permanencias registradas para generar un mapa de calor.',
+      'Cuando los encuestadores registren detenciones, este panel mostrara puntos de interes por planta y parqueadero.'
+    ];
+  }
+  const topFloor = withData.slice().sort((a, b) => b.metrics.totalSeconds - a.metrics.totalSeconds)[0];
+  const topStayFloor = withData.slice().sort((a, b) => b.metrics.stays - a.metrics.stays)[0];
+  const topPoi = topFloor.pointsOfInterest[0];
+  const conclusions = [
+    `${topFloor.label} concentra el mayor tiempo acumulado de permanencia con ${formatDurationLabel_(topFloor.metrics.totalSeconds)}.`,
+    `${topStayFloor.label} registra la mayor cantidad de detenciones: ${topStayFloor.metrics.stays}.`,
+    `El tiempo promedio por permanencia es ${formatDurationLabel_(totals.avgStaySeconds)}.`
+  ];
+  if (topPoi) {
+    conclusions.push(`El punto de interes mas fuerte es ${topPoi.label} en ${topFloor.label}, con ${topPoi.stays} permanencias y ${formatDurationLabel_(topPoi.totalSeconds)} acumulados.`);
+  }
+  return conclusions;
+}
+
+function buildFloorConclusion_(label, stays, visitors, totalSeconds, poiGroups) {
+  if (!stays) {
+    return `${label} todavia no tiene permanencias registradas.`;
+  }
+  const top = poiGroups[0];
+  if (!top) {
+    return `${label} tiene ${stays} permanencias de ${visitors} visitantes, con ${formatDurationLabel_(totalSeconds)} acumulados.`;
+  }
+  return `${label}: ${top.label} lidera los puntos de interes con ${top.stays} permanencias y ${formatDurationLabel_(top.totalSeconds)}.`;
+}
+
+function getRows_(sheetName) {
+  const sheet = getSpreadsheet_().getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() <= 1) {
+    return [];
+  }
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  return values.slice(1).map((row) => rowToObject_(headers, row, true));
+}
+
+function normalizedNumber_(value) {
+  const number = Number(value);
+  if (!isFinite(number)) {
+    return 0;
+  }
+  return Math.min(1, Math.max(0, number));
+}
+
+function sum_(rows, field) {
+  return rows.reduce((total, row) => total + Number(row[field] || 0), 0);
+}
+
+function uniqueCount_(values) {
+  return Object.keys(values.reduce((set, value) => {
+    if (value) set[value] = true;
+    return set;
+  }, {})).length;
+}
+
+function topEntry_(counts) {
+  return Object.keys(counts)
+    .map((name) => ({ name, count: counts[name] }))
+    .sort((a, b) => b.count - a.count)[0] || null;
+}
+
+function formatDurationLabel_(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds || 0)));
+  if (total < 60) {
+    return `${total} s`;
+  }
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  if (minutes < 60) {
+    return rest ? `${minutes} min ${rest} s` : `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const minuteRest = minutes % 60;
+  return minuteRest ? `${hours} h ${minuteRest} min` : `${hours} h`;
+}
+
 function ensureHeaders_(sheet, headers) {
   const current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
   const needsHeaders = current.some((value, index) => value !== headers[index]);
@@ -510,11 +787,19 @@ function getActiveRows_(sheetName) {
     .filter((row) => String(row.activo || 'SI').toUpperCase() !== 'NO');
 }
 
-function rowToObject_(headers, row) {
+function rowToObject_(headers, row, serialize) {
   return headers.reduce((object, header, index) => {
-    object[header] = row[index];
+    const value = row[index];
+    object[header] = serialize ? serializeCellValue_(value) : value;
     return object;
   }, {});
+}
+
+function serializeCellValue_(value) {
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  return value;
 }
 
 function appendValues_(sheetName, values) {

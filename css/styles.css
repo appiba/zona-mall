@@ -34,7 +34,8 @@ body {
 
 button,
 select,
-textarea {
+textarea,
+input {
   font: inherit;
 }
 
@@ -45,7 +46,8 @@ button {
 
 button:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+input:focus-visible {
   outline: 3px solid rgba(23, 105, 170, 0.28);
   outline-offset: 2px;
 }
@@ -72,6 +74,20 @@ textarea:focus-visible {
 .setup-grid {
   width: min(100%, 980px);
   margin: 0 auto;
+}
+
+.admin-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  margin-top: 14px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 850;
 }
 
 .eyebrow,
@@ -111,7 +127,8 @@ h1 {
 }
 
 select,
-textarea {
+textarea,
+input {
   width: 100%;
   min-height: 48px;
   border: 1px solid var(--line);
@@ -124,6 +141,10 @@ textarea {
 textarea {
   padding: 10px 12px;
   resize: vertical;
+}
+
+input {
+  padding: 0 12px;
 }
 
 .floor-picker {
@@ -290,8 +311,8 @@ textarea {
   margin: -11px 0 0 -11px;
   border: 3px solid #ffffff;
   border-radius: 50%;
-  background: var(--amber);
-  box-shadow: 0 0 0 8px rgba(185, 130, 24, 0.24);
+  background: var(--stay-color, var(--amber));
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--stay-color, var(--amber)) 24%, transparent);
   pointer-events: none;
 }
 
@@ -381,7 +402,7 @@ textarea {
 
 .stay-summary {
   display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(120px, 0.55fr) minmax(0, 1.45fr);
   gap: 10px;
   margin-bottom: 10px;
 }
@@ -410,6 +431,14 @@ textarea {
   font-size: 1.55rem;
 }
 
+.stay-location-input {
+  min-height: 40px;
+  margin-top: 7px;
+  background: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 760;
+}
+
 .activity-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -419,9 +448,28 @@ textarea {
 }
 
 .activity-grid button.selected {
-  background: var(--amber);
+  background: var(--activity-color, var(--amber));
   color: #ffffff;
-  border-color: var(--amber);
+  border-color: var(--activity-color, var(--amber));
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--activity-color, var(--amber)) 25%, transparent);
+}
+
+.activity-grid button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px 0 20px;
+}
+
+.activity-grid button::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  width: 7px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--activity-color, var(--amber));
 }
 
 .bottom-bar {

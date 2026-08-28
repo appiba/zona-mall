@@ -1,4 +1,5 @@
-const ACTIVITIES = [
+const ACTIVITY_META = window.ZonarActivityMeta || null;
+const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     'MIRANDO PRODUCTO',
     'MIRANDO VITRINA',
     'PREGUNTANDO',
@@ -37,7 +38,8 @@ const ACTIVITIES = [
     zoom: 1,
     pan: { x: 0, y: 0 },
     pinch: null,
-    mapLoaded: false
+    mapLoaded: false,
+    locationOptions: []
   };
 
   const els = {};
@@ -53,13 +55,17 @@ const ACTIVITIES = [
         state.app = app;
         state.maps = (window.ZonarConfig.maps || app.maps || []).map((map) => ({ ...map }));
         state.zones = normalizeZones(app.zonas || []);
-        state.locales = app.locales || [];
+        state.locales = [
+          ...(window.ZonarConfig.knownLocations || []),
+          ...(app.locales || [])
+        ];
         state.config = app.config || {};
         document.title = app.appName || 'Zonar Mall';
         els.appName.textContent = app.appName || 'Zonar Mall';
         renderSurveyors(app.encuestadores || []);
         renderFloorButtons();
         renderManualEventOptions();
+        renderLocationOptions();
       })
       .catch((error) => {
         showMapMessage('No se pudo iniciar la aplicacion. Revisa la conexion con Google Apps Script.');
@@ -95,6 +101,8 @@ const ACTIVITIES = [
       'stayPanel',
       'stayTimer',
       'detectedLocation',
+      'stayLocationInput',
+      'locationDatalist',
       'activityButtons',
       'manualPauseBtn',
       'manualEventBtn',
@@ -152,6 +160,7 @@ const ACTIVITIES = [
     els.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.2));
     els.zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.2));
     els.zoomResetBtn.addEventListener('click', () => setZoom(1));
+    els.stayLocationInput.addEventListener('input', updateStayLocationDisplay);
     setInterval(flushAll, getNumberConfig('AUTO_SAVE_INTERVAL', 5000));
   }
 
@@ -205,9 +214,10 @@ const ACTIVITIES = [
   function renderManualEventOptions() {
     els.manualEventSelect.innerHTML = '';
     ACTIVITIES.forEach((activity) => {
+      const meta = getActivityMeta(activity);
       const option = document.createElement('option');
       option.value = activity;
-      option.textContent = activity;
+      option.textContent = meta.label;
       els.manualEventSelect.append(option);
     });
   }
@@ -215,11 +225,51 @@ const ACTIVITIES = [
   function renderActivityButtons() {
     els.activityButtons.innerHTML = '';
     ACTIVITIES.forEach((activity) => {
+      const meta = getActivityMeta(activity);
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = activity;
+      button.style.setProperty('--activity-color', meta.color);
+      button.title = meta.description;
+      button.textContent = meta.label;
       button.addEventListener('click', () => toggleStayActivity(activity, button));
       els.activityButtons.append(button);
+    });
+  }
+
+  function renderLocationOptions() {
+    const entries = [];
+    const seen = {};
+    const addEntry = (item) => {
+      const code = String(item.codigo || '').trim();
+      const name = String(item.nombre || '').trim();
+      if (!code && !name) {
+        return;
+      }
+      const floor = String(item.piso || '').trim();
+      const value = formatLocationValue({ codigo: code, nombre: name || code });
+      const key = `${floor}|${code}|${name}`.toUpperCase();
+      if (seen[key]) {
+        return;
+      }
+      seen[key] = true;
+      entries.push({
+        codigo: code,
+        nombre: name || code,
+        piso: floor,
+        tipo: item.tipo || '',
+        value
+      });
+    };
+
+    state.zones.forEach(addEntry);
+    state.locales.forEach(addEntry);
+    state.locationOptions = entries.sort((a, b) => a.value.localeCompare(b.value, 'es'));
+    els.locationDatalist.innerHTML = '';
+    state.locationOptions.forEach((entry) => {
+      const option = document.createElement('option');
+      option.value = entry.value;
+      option.label = entry.piso ? `${entry.piso} · ${entry.codigo || entry.nombre}` : entry.codigo || entry.nombre;
+      els.locationDatalist.append(option);
     });
   }
 
@@ -462,9 +512,12 @@ const ACTIVITIES = [
       floor: state.selectedFloor,
       startedAt: new Date(),
       activities: [],
+      primaryActivity: '',
       location
     };
-    els.detectedLocation.textContent = location ? `${location.nombre} ${location.codigo || ''}`.trim() : 'Sin local asociado';
+    els.stayLocationInput.value = location ? formatLocationValue(location) : '';
+    updateStayLocationDisplay();
+    els.stayMarker.style.setProperty('--stay-color', getActivityMeta('OTRO').color);
     els.stayTimer.textContent = '00:00';
     els.stayPanel.classList.remove('hidden');
     positionStayMarker();
@@ -481,6 +534,7 @@ const ACTIVITIES = [
     const endedAt = new Date();
     const duration = Math.max(0, Math.round((endedAt - stay.startedAt) / 1000));
     const minStay = getNumberConfig('MIN_STAY_SECONDS', 3);
+    const location = resolveStayLocation(stay);
     clearInterval(state.stayTimerId);
     hideStayPanel();
     els.stayMarker.classList.add('hidden');
@@ -490,8 +544,7 @@ const ACTIVITIES = [
     }
     state.staysCount += 1;
     state.staySecondsTotal += duration;
-    const location = stay.location || {};
-    callServer('savePermanencia', {
+    const permanenciaPayload = {
       permanencia_id: stay.permanencia_id,
       persona_id: state.current.persona_id,
       piso: stay.floor,
@@ -503,20 +556,9 @@ const ACTIVITIES = [
       hora_fin: endedAt.toISOString(),
       duracion_segundos: duration,
       clasificacion: classifyStay(duration)
-    }).catch((error) => {
-      queueOffline('savePermanencia', {
-        permanencia_id: stay.permanencia_id,
-        persona_id: state.current.persona_id,
-        piso: stay.floor,
-        x: stay.point.x,
-        y: stay.point.y,
-        local_codigo: location.codigo || '',
-        local_nombre: location.nombre || '',
-        hora_inicio: stay.startedAt.toISOString(),
-        hora_fin: endedAt.toISOString(),
-        duracion_segundos: duration,
-        clasificacion: classifyStay(duration)
-      });
+    };
+    callServer('savePermanencia', permanenciaPayload).catch((error) => {
+      queueOffline('savePermanencia', permanenciaPayload);
       console.error(error);
     });
     if (stay.activities.length) {
@@ -549,7 +591,11 @@ const ACTIVITIES = [
     if (!state.stay) {
       return;
     }
+    els.activityButtons.querySelectorAll('button').forEach((item) => item.classList.remove('selected'));
+    const meta = getActivityMeta(activity);
     button.classList.add('selected');
+    state.stay.primaryActivity = activity;
+    els.stayMarker.style.setProperty('--stay-color', meta.color);
     state.stay.activities.push({
       activity,
       timestamp: new Date().toISOString()
@@ -905,6 +951,72 @@ const ACTIVITIES = [
   function hideStayPanel() {
     els.stayPanel.classList.add('hidden');
     els.activityButtons.querySelectorAll('button').forEach((button) => button.classList.remove('selected'));
+    els.stayLocationInput.value = '';
+    els.detectedLocation.textContent = 'Sin local asociado';
+  }
+
+  function updateStayLocationDisplay() {
+    if (!state.stay) {
+      return;
+    }
+    const location = resolveStayLocation(state.stay);
+    els.detectedLocation.textContent = location.nombre || 'Sin local asociado';
+  }
+
+  function resolveStayLocation(stay) {
+    const typed = String(els.stayLocationInput.value || '').trim();
+    const detected = stay.location || {};
+    if (!typed) {
+      return {
+        codigo: detected.codigo || '',
+        nombre: detected.nombre || '',
+        piso: detected.piso || stay.floor,
+        tipo: detected.tipo || ''
+      };
+    }
+    const normalized = typed.toLowerCase();
+    const match = (state.locationOptions || []).find((entry) => (
+      entry.value.toLowerCase() === normalized &&
+      (!entry.piso || entry.piso === stay.floor || entry.piso === getFloorLabel(stay.floor))
+    )) || (state.locationOptions || []).find((entry) => entry.value.toLowerCase() === normalized);
+    if (match) {
+      return {
+        codigo: match.codigo || detected.codigo || '',
+        nombre: match.nombre || typed,
+        piso: match.piso || stay.floor,
+        tipo: match.tipo || detected.tipo || ''
+      };
+    }
+    return {
+      codigo: detected.codigo || '',
+      nombre: typed,
+      piso: stay.floor,
+      tipo: detected.tipo || ''
+    };
+  }
+
+  function formatLocationValue(location) {
+    const code = String(location.codigo || '').trim();
+    const name = String(location.nombre || '').trim();
+    if (name && code && name.toUpperCase().includes(code.toUpperCase())) {
+      return name;
+    }
+    if (name && code) {
+      return `${name} (${code})`;
+    }
+    return name || code || '';
+  }
+
+  function getActivityMeta(activity) {
+    if (ACTIVITY_META) {
+      return ACTIVITY_META.get(activity);
+    }
+    return {
+      id: String(activity || 'OTRO'),
+      label: String(activity || 'Otro').toLowerCase(),
+      color: '#475569',
+      description: ''
+    };
   }
 
   function showMapMessage(message) {

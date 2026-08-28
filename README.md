@@ -15,15 +15,22 @@ El frontend vive en este repositorio y esta preparado para publicarse desde:
 
 `https://appiba.github.io/zona-mall/`
 
+El panel administrativo se abre en:
+
+`https://appiba.github.io/zona-mall/admin.html`
+
 Apps Script queda como backend/API y Google Sheets conserva la base de datos.
 
 ## Estructura
 
 - `index.html`: aplicacion principal para encuestadores.
+- `admin.html`: panel administrativo con mapa de calor, puntos de interes, graficos y conclusiones.
 - `css/`: estilos responsive para tablet, celular y escritorio.
 - `js/config.js`: configuracion central, incluyendo `apiUrl` y mapas.
 - `js/api.js`: cliente JSONP para llamar Apps Script desde GitHub Pages.
+- `js/activity-meta.js`: catalogo visual de actividades y colores.
 - `js/app.js`: trazado, permanencias, actividades, cambio de piso y guardado.
+- `js/admin.js`: analisis por planta y parqueadero desde `PERMANENCIAS`.
 - `assets/maps/`: mapas reales usados como capas base.
 - `apps-script/Code.gs`: backend/API para Google Sheets.
 - `data/`: archivos base para directorios y simbologia sin inventar datos.
@@ -67,10 +74,11 @@ La primera version mantiene:
 - levantamiento de lapiz sin finalizar recorrido;
 - Persona Detenida y Pausa de Seguimiento;
 - cronometro de permanencia;
-- multiples actividades por permanencia;
+- actividades por permanencia con color por motivo;
+- local o lugar cercano editable con sugerencias de codigos visibles del mapa;
 - continuacion del mismo recorrido;
 - cambio de piso;
 - finalizacion;
 - guardado progresivo con cola local temporal.
 
-El heatmap y dashboard quedan preparados como siguiente etapa sobre `PERMANENCIAS`; las rutas no deben usarse para generar zonas calientes.
+El panel administrativo usa `PERMANENCIAS` para mapas de calor, rankings y conclusiones. Las rutas no se usan para generar zonas calientes. Los puntos calientes se colorean por actividad principal para distinguir compras, preguntas, vitrina, consumo, espera y otros motivos.
