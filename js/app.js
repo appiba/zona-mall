@@ -18,6 +18,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     maps: [],
     zones: [],
     locales: [],
+    locationPoints: [],
     config: {},
     selectedFloor: null,
     current: null,
@@ -35,6 +36,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     startedAt: null,
     timerId: null,
     stayTimerId: null,
+    toastTimerId: null,
     zoom: 1,
     pan: { x: 0, y: 0 },
     pinch: null,
@@ -56,9 +58,10 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         state.maps = (window.ZonarConfig.maps || app.maps || []).map((map) => ({ ...map }));
         state.zones = normalizeZones(app.zonas || []);
         state.locales = [
-          ...(window.ZonarConfig.knownLocations || []),
-          ...(app.locales || [])
+          ...(app.locales || []),
+          ...(window.ZonarConfig.knownLocations || [])
         ];
+        state.locationPoints = normalizeLocationPoints(window.ZonarConfig.locationPoints || {});
         state.config = app.config || {};
         document.title = app.appName || 'Zonar Mall';
         els.appName.textContent = app.appName || 'Zonar Mall';
@@ -93,6 +96,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       'mapViewport',
       'mapImage',
       'drawCanvas',
+      'liveLocationBadge',
       'stayMarker',
       'mapMessage',
       'liftPanel',
@@ -113,6 +117,8 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       'manualEventSelect',
       'manualEventObservation',
       'saveManualEventBtn',
+      'saveStayBtn',
+      'toastMessage',
       'zoomOutBtn',
       'zoomResetBtn',
       'zoomInBtn'
@@ -143,6 +149,9 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       resizeCanvas();
       replayFloor();
       positionStayMarker();
+      if (state.lastPoint) {
+        updateLiveLocation(state.lastPoint);
+      }
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && state.isDrawing) {
@@ -155,6 +164,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.manualPauseBtn.addEventListener('click', markManualPause);
     els.manualEventBtn.addEventListener('click', () => openDialog(els.eventDialog));
     els.saveManualEventBtn.addEventListener('click', saveManualEvent);
+    els.saveStayBtn.addEventListener('click', () => finishStay({ manual: true }));
     els.changeFloorBtn.addEventListener('click', () => openDialog(els.floorDialog));
     els.finishBtn.addEventListener('click', finishTracking);
     els.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.2));
@@ -319,6 +329,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     resetZoom();
     hideLiftPanel();
     hideStayPanel();
+    hideLiveLocationBadge();
     state.mapLoaded = false;
     els.mapImage.removeAttribute('src');
     if (map && map.src && map.src.startsWith('data:')) {
@@ -377,6 +388,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     event.preventDefault();
     els.mapViewport.setPointerCapture(event.pointerId);
     hideLiftPanel();
+    hideLiveLocationBadge();
     state.isDrawing = true;
     state.activePointerId = event.pointerId;
     state.lastPoint = point;
@@ -391,6 +403,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     event.preventDefault();
     const point = screenToMapCoordinates(event.clientX, event.clientY);
     if (!point) {
+      hideLiveLocationBadge();
       return;
     }
     const now = Date.now();
@@ -412,6 +425,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       addRoutePoint(point, 'FIN_SEGMENTO');
     }
     stopDrawing();
+    updateLiveLocation(point);
     showLiftPanel();
     flushRoutePoints();
   }
@@ -445,6 +459,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     drawSegment(state.lastPoint, routePoint);
     state.lastPoint = routePoint;
     state.lastCaptureAt = Date.now();
+    updateLiveLocation(routePoint);
   }
 
   function drawTemporarySegment(from, to) {
@@ -453,6 +468,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     }
     replayFloor();
     drawSegment(from, to, true);
+    updateLiveLocation(to);
   }
 
   function drawSegment(from, to, temporary) {
@@ -505,6 +521,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       return;
     }
     hideLiftPanel();
+    hideLiveLocationBadge();
     const location = detectLocation(state.lastPoint);
     state.stay = {
       permanencia_id: cryptoRandomId(),
@@ -519,6 +536,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     updateStayLocationDisplay();
     els.stayMarker.style.setProperty('--stay-color', getActivityMeta('OTRO').color);
     els.stayTimer.textContent = '00:00';
+    updateSaveStayButton(0);
     els.stayPanel.classList.remove('hidden');
     positionStayMarker();
     els.stayMarker.classList.remove('hidden');
@@ -526,15 +544,21 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     state.stayTimerId = setInterval(updateStayTimer, 250);
   }
 
-  function finishStay() {
+  function finishStay(options) {
     if (!state.stay) {
       return;
     }
+    const settings = options || {};
     const stay = state.stay;
     const endedAt = new Date();
     const duration = Math.max(0, Math.round((endedAt - stay.startedAt) / 1000));
     const minStay = getNumberConfig('MIN_STAY_SECONDS', 3);
     const location = resolveStayLocation(stay);
+    if (duration < minStay && settings.manual) {
+      updateSaveStayButton(duration);
+      showToast(`Espera ${minStay - duration} s mas para guardar esta permanencia.`, true);
+      return;
+    }
     clearInterval(state.stayTimerId);
     hideStayPanel();
     els.stayMarker.classList.add('hidden');
@@ -577,6 +601,9 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         console.error(error);
       });
     }
+    if (settings.manual) {
+      showToast(`Permanencia guardada: ${duration}s en ${location.nombre || 'zona sin nombre'}.`);
+    }
   }
 
   function updateStayTimer() {
@@ -585,6 +612,16 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     }
     const seconds = Math.max(0, Math.floor((Date.now() - state.stay.startedAt.getTime()) / 1000));
     els.stayTimer.textContent = formatClock(seconds, false);
+    updateSaveStayButton(seconds);
+  }
+
+  function updateSaveStayButton(seconds) {
+    const minStay = getNumberConfig('MIN_STAY_SECONDS', 3);
+    const remaining = Math.max(0, minStay - Number(seconds || 0));
+    els.saveStayBtn.disabled = remaining > 0;
+    els.saveStayBtn.textContent = remaining > 0
+      ? `Guardar en ${remaining} s`
+      : 'Guardar permanencia';
   }
 
   function toggleStayActivity(activity, button) {
@@ -770,6 +807,14 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     };
   }
 
+  function normalizedNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      return 0;
+    }
+    return Math.min(1, Math.max(0, number));
+  }
+
   function denormalizeCoordinates(x, y) {
     return mapToScreenCoordinates(x, y);
   }
@@ -798,10 +843,14 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
   }
 
   function detectLocation(point) {
-    const floorZones = state.zones.filter((zone) => zone.piso === state.selectedFloor || zone.piso === getFloorLabel(state.selectedFloor));
+    const floorZones = state.zones.filter((zone) => matchesFloor(zone.piso, state.selectedFloor));
     const polygonHit = floorZones.find((zone) => zone.polygon && pointInPolygon(point, zone.polygon));
     if (polygonHit) {
       return polygonHit;
+    }
+    const configuredHit = nearestConfiguredLocation(point);
+    if (configuredHit) {
+      return configuredHit;
     }
     const maxDistance = getNumberConfig('NEARBY_LOCATION_DISTANCE', 0.035);
     let nearest = null;
@@ -816,6 +865,20 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       }
     });
     return nearest ? nearest.zone : null;
+  }
+
+  function nearestConfiguredLocation(point) {
+    let nearest = null;
+    state.locationPoints
+      .filter((location) => matchesFloor(location.piso, state.selectedFloor))
+      .forEach((location) => {
+        const distance = Math.hypot(point.x - location.x, point.y - location.y);
+        const radius = Number(location.radius || getNumberConfig('NEARBY_LOCATION_DISTANCE', 0.045));
+        if (distance <= radius && (!nearest || distance < nearest.distance)) {
+          nearest = { location, distance };
+        }
+      });
+    return nearest ? nearest.location : null;
   }
 
   function normalizeZones(rows) {
@@ -835,6 +898,32 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         polygon
       };
     });
+  }
+
+  function normalizeLocationPoints(pointsByFloor) {
+    const index = {};
+    state.locales.forEach((location) => {
+      const key = `${floorLookupKey(location.piso)}|${String(location.codigo || '').toUpperCase()}`;
+      if (!index[key]) {
+        index[key] = location;
+      }
+    });
+
+    return Object.keys(pointsByFloor).flatMap((floorId) => (
+      (pointsByFloor[floorId] || []).map((point) => {
+        const code = String(point.codigo || '').trim();
+        const match = index[`${floorLookupKey(floorId)}|${code.toUpperCase()}`] || {};
+        return {
+          codigo: code,
+          nombre: match.nombre || code,
+          tipo: match.tipo || 'LOCAL',
+          piso: floorId,
+          x: normalizedNumber(point.x),
+          y: normalizedNumber(point.y),
+          radius: Number(point.radius || getNumberConfig('NEARBY_LOCATION_DISTANCE', 0.045))
+        };
+      })
+    ));
   }
 
   function pointInPolygon(point, polygon) {
@@ -876,6 +965,27 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.stayMarker.style.top = `${screen.y}px`;
   }
 
+  function updateLiveLocation(point) {
+    if (!point || !state.mapLoaded || state.stay) {
+      hideLiveLocationBadge();
+      return;
+    }
+    const location = detectLocation(point);
+    const screen = mapToScreenCoordinates(point.x, point.y);
+    if (!location || !screen) {
+      hideLiveLocationBadge();
+      return;
+    }
+    els.liveLocationBadge.querySelector('strong').textContent = formatLocationValue(location);
+    els.liveLocationBadge.style.left = `${screen.x}px`;
+    els.liveLocationBadge.style.top = `${screen.y}px`;
+    els.liveLocationBadge.classList.remove('hidden');
+  }
+
+  function hideLiveLocationBadge() {
+    els.liveLocationBadge.classList.add('hidden');
+  }
+
   function setZoom(nextZoom) {
     if (state.isDrawing) {
       return;
@@ -885,6 +995,9 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.drawCanvas.style.transform = `scale(${state.zoom})`;
     replayFloor();
     positionStayMarker();
+    if (state.lastPoint) {
+      updateLiveLocation(state.lastPoint);
+    }
   }
 
   function resetZoom() {
@@ -940,6 +1053,31 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     return map ? map.label : floorId;
   }
 
+  function normalizeFloorText(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toUpperCase();
+  }
+
+  function floorLookupKey(value) {
+    const normalized = normalizeFloorText(value);
+    const map = state.maps.find((item) => (
+      normalizeFloorText(item.id) === normalized ||
+      normalizeFloorText(item.label) === normalized
+    ));
+    return map ? normalizeFloorText(map.id) : normalized;
+  }
+
+  function matchesFloor(value, floorId) {
+    if (!value || !floorId) {
+      return false;
+    }
+    return floorLookupKey(value) === floorLookupKey(floorId);
+  }
+
   function showLiftPanel() {
     els.liftPanel.classList.remove('hidden');
   }
@@ -953,6 +1091,8 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.activityButtons.querySelectorAll('button').forEach((button) => button.classList.remove('selected'));
     els.stayLocationInput.value = '';
     els.detectedLocation.textContent = 'Sin local asociado';
+    els.saveStayBtn.disabled = true;
+    els.saveStayBtn.textContent = 'Guardar permanencia';
   }
 
   function updateStayLocationDisplay() {
@@ -977,7 +1117,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     const normalized = typed.toLowerCase();
     const match = (state.locationOptions || []).find((entry) => (
       entry.value.toLowerCase() === normalized &&
-      (!entry.piso || entry.piso === stay.floor || entry.piso === getFloorLabel(stay.floor))
+      (!entry.piso || matchesFloor(entry.piso, stay.floor))
     )) || (state.locationOptions || []).find((entry) => entry.value.toLowerCase() === normalized);
     if (match) {
       return {
@@ -1017,6 +1157,16 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       color: '#475569',
       description: ''
     };
+  }
+
+  function showToast(message, isWarning) {
+    window.clearTimeout(state.toastTimerId);
+    els.toastMessage.textContent = message;
+    els.toastMessage.classList.toggle('warning', Boolean(isWarning));
+    els.toastMessage.classList.remove('hidden');
+    state.toastTimerId = window.setTimeout(() => {
+      els.toastMessage.classList.add('hidden');
+    }, 2400);
   }
 
   function showMapMessage(message) {

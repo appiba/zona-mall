@@ -89,6 +89,10 @@
         <div id="mapViewport" class="map-viewport">
           <img id="mapImage" alt="Mapa del centro comercial">
           <canvas id="drawCanvas"></canvas>
+          <div id="liveLocationBadge" class="live-location-badge hidden">
+            <span>Local cercano</span>
+            <strong></strong>
+          </div>
           <div id="stayMarker" class="stay-marker hidden"></div>
           <div id="mapMessage" class="map-message hidden"></div>
         </div>
@@ -122,7 +126,12 @@
           </div>
         </div>
         <div id="activityButtons" class="activity-grid"></div>
+        <div class="stay-actions">
+          <button id="saveStayBtn" class="save-stay-action" type="button" disabled>Guardar permanencia</button>
+        </div>
       </aside>
+
+      <div id="toastMessage" class="toast-message hidden"></div>
 
       <nav class="bottom-bar" aria-label="Acciones del recorrido">
         <button id="manualPauseBtn" type="button">Pausa</button>
