@@ -245,6 +245,9 @@
       return;
     }
     const maxWeight = Math.max(...points.map((point) => Number(point.weight || 1)));
+    const heatSize = window.matchMedia('(max-width: 820px)').matches
+      ? { base: 22, spread: 34 }
+      : { base: 34, spread: 58 };
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     points.forEach((point) => {
@@ -252,7 +255,7 @@
       const y = rect.top + (Number(point.y) * rect.height);
       const normalized = Math.max(0.12, Math.min(1, Number(point.weight || 1) / maxWeight));
       const meta = getActivityMeta(point.topActivity || 'OTRO');
-      drawHeatPoint(ctx, x, y, 34 + (normalized * 58), normalized, meta.color);
+      drawHeatPoint(ctx, x, y, heatSize.base + (normalized * heatSize.spread), normalized, meta.color);
     });
     ctx.restore();
     renderPoiLabels(floor.pointsOfInterest || [], rect);
@@ -272,16 +275,22 @@
   }
 
   function renderPoiLabels(pois, rect) {
-    pois.slice(0, 5).forEach((poi, index) => {
+    const limit = window.matchMedia('(max-width: 820px)').matches ? 3 : 5;
+    pois.slice(0, limit).forEach((poi, index) => {
       const meta = getActivityMeta(poi.topActivity || 'OTRO');
       const label = document.createElement('div');
       label.className = 'poi-label';
       label.style.setProperty('--poi-color', meta.color);
       label.style.left = `${rect.left + (Number(poi.x) * rect.width)}px`;
       label.style.top = `${rect.top + (Number(poi.y) * rect.height)}px`;
-      label.innerHTML = `${index + 1}. ${escapeHtml(poi.label)}<span>${poi.stays} perm. · ${escapeHtml(activityLabel(poi.topActivity))}</span>`;
+      label.title = `${index + 1}. ${poi.label} · ${poi.stays} permanencias · ${activityLabel(poi.topActivity)}`;
+      label.innerHTML = `<b>${index + 1}</b><strong>${escapeHtml(shortPoiLabel(poi.label))}</strong><span>${poi.stays} perm.</span>`;
       els.poiLabels.append(label);
     });
+  }
+
+  function shortPoiLabel(label) {
+    return String(label || '').replace(/^Zona caliente\s*/i, 'Z. ').replace(/^Local\s+/i, '');
   }
 
   function drawEmptyMapMessage(ctx, frameRect, message) {
