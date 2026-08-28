@@ -50,6 +50,23 @@
     right: 20px;
   }
 
+  .floor-switch-panel {
+    top: 72px;
+    left: 20px;
+    right: 20px;
+    width: auto;
+  }
+
+  .floor-switch-heading {
+    margin-bottom: 7px;
+  }
+
+  .floor-quick-options {
+    grid-template-columns: repeat(5, minmax(92px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
   .stay-summary,
   .panel-actions.two,
   .dialog-actions {
@@ -91,6 +108,21 @@
     left: auto;
     width: min(430px, 42vw);
     bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+
+  .floor-switch-panel {
+    top: 86px;
+    width: min(236px, calc(100% - 40px));
+    padding: 8px;
+  }
+
+  .floor-quick-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .floor-quick-options button {
+    min-height: 32px;
+    font-size: 0.7rem;
   }
 
   .activity-grid {

@@ -37,6 +37,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     timerId: null,
     stayTimerId: null,
     toastTimerId: null,
+    floorSwitcherTimerId: null,
     zoom: 1,
     pan: { x: 0, y: 0 },
     pinch: null,
@@ -88,7 +89,9 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       'originSelect',
       'visitTypeSelect',
       'initialFloorOptions',
-      'floorDialogOptions',
+      'floorQuickOptions',
+      'floorSwitchPanel',
+      'quickFloorLabel',
       'personBadge',
       'floorBadge',
       'surveyorBadge',
@@ -112,7 +115,6 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       'manualEventBtn',
       'changeFloorBtn',
       'finishBtn',
-      'floorDialog',
       'eventDialog',
       'manualEventSelect',
       'manualEventObservation',
@@ -165,7 +167,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.manualEventBtn.addEventListener('click', () => openDialog(els.eventDialog));
     els.saveManualEventBtn.addEventListener('click', saveManualEvent);
     els.saveStayBtn.addEventListener('click', () => finishStay({ manual: true }));
-    els.changeFloorBtn.addEventListener('click', () => openDialog(els.floorDialog));
+    els.changeFloorBtn.addEventListener('click', highlightFloorSwitcher);
     els.finishBtn.addEventListener('click', finishTracking);
     els.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.2));
     els.zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.2));
@@ -187,18 +189,17 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
 
   function renderFloorButtons() {
     els.initialFloorOptions.innerHTML = '';
-    els.floorDialogOptions.innerHTML = '';
+    els.floorQuickOptions.innerHTML = '';
     state.maps.forEach((map, index) => {
       const setupButton = buildFloorButton(map, () => {
         state.selectedFloor = map.id;
         updateFloorButtonStates();
       });
-      const dialogButton = buildFloorButton(map, () => {
-        closeDialog(els.floorDialog);
+      const quickButton = buildFloorButton(map, () => {
         changeFloor(map.id);
       });
       els.initialFloorOptions.append(setupButton);
-      els.floorDialogOptions.append(dialogButton);
+      els.floorQuickOptions.append(quickButton);
       if (index === 0 && !state.selectedFloor) {
         state.selectedFloor = map.id;
       }
@@ -218,7 +219,22 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
   function updateFloorButtonStates() {
     document.querySelectorAll('[data-floor]').forEach((button) => {
       button.classList.toggle('active', button.dataset.floor === state.selectedFloor);
+      button.setAttribute('aria-pressed', button.dataset.floor === state.selectedFloor ? 'true' : 'false');
     });
+    if (els.quickFloorLabel) {
+      els.quickFloorLabel.textContent = getFloorLabel(state.selectedFloor);
+    }
+  }
+
+  function highlightFloorSwitcher() {
+    if (!state.current) {
+      return;
+    }
+    window.clearTimeout(state.floorSwitcherTimerId);
+    els.floorSwitchPanel.classList.add('attention');
+    state.floorSwitcherTimerId = window.setTimeout(() => {
+      els.floorSwitchPanel.classList.remove('attention');
+    }, 1400);
   }
 
   function renderManualEventOptions() {
@@ -357,6 +373,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     if (!state.current || nextFloor === state.selectedFloor) {
       return;
     }
+    els.floorSwitchPanel.classList.remove('attention');
     if (state.stay) {
       finishStay();
     }

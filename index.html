@@ -102,6 +102,14 @@
           <button id="zoomResetBtn" class="icon-button" type="button" title="Restablecer zoom">1x</button>
           <button id="zoomInBtn" class="icon-button" type="button" title="Acercar">+</button>
         </div>
+
+        <div id="floorSwitchPanel" class="floor-switch-panel" aria-label="Cambiar piso">
+          <div class="floor-switch-heading">
+            <span>Cambiar piso</span>
+            <strong id="quickFloorLabel">Piso</strong>
+          </div>
+          <div id="floorQuickOptions" class="floor-quick-options"></div>
+        </div>
       </section>
 
       <aside id="liftPanel" class="action-panel hidden">
@@ -141,16 +149,6 @@
       </nav>
     </section>
   </main>
-
-  <dialog id="floorDialog" class="modal">
-    <form method="dialog">
-      <h2>Cambiar piso</h2>
-      <div id="floorDialogOptions" class="segmented-list"></div>
-      <div class="dialog-actions">
-        <button type="submit">Cancelar</button>
-      </div>
-    </form>
-  </dialog>
 
   <dialog id="eventDialog" class="modal">
     <form method="dialog">
