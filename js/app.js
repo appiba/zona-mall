@@ -154,6 +154,11 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.mapViewport.addEventListener('pointermove', handlePointerMove);
     els.mapViewport.addEventListener('pointerup', handlePointerUp);
     els.mapViewport.addEventListener('pointercancel', handlePointerUp);
+    const mapTouchOptions = { passive: false };
+    els.mapViewport.addEventListener('touchstart', preventMapGesture, mapTouchOptions);
+    els.mapViewport.addEventListener('touchmove', preventMapGesture, mapTouchOptions);
+    els.mapViewport.addEventListener('gesturestart', preventMapGesture, mapTouchOptions);
+    els.mapViewport.addEventListener('gesturechange', preventMapGesture, mapTouchOptions);
     els.mapImage.addEventListener('load', () => {
       state.mapLoaded = true;
       hideMapMessage();
@@ -392,16 +397,8 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     };
     callServer('createPerson', payload)
       .then((record) => {
-        state.current = record;
-        state.current.encuestador = payload.encuestador;
-        state.startedAt = new Date(record.hora_inicio || Date.now());
-        state.visitedFloors = new Set([state.selectedFloor]);
-        state.routeByFloor = {};
-        state.pendingPoints = [];
-        state.pendingEvents = [];
-        state.staysCount = 0;
-        state.staySecondsTotal = 0;
-        els.personBadge.textContent = record.persona_id;
+        resetTrackingForNewPerson(record, payload);
+        els.personBadge.textContent = state.current.persona_id;
         els.surveyorBadge.textContent = payload.encuestador;
         els.setupView.classList.add('hidden');
         els.trackerView.classList.remove('hidden');
@@ -412,6 +409,37 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         console.error(error);
         showSetupStatus('No se pudo iniciar el recorrido. Revisa internet y vuelve a tocar Iniciar recorrido.');
       });
+  }
+
+  function resetTrackingForNewPerson(record, payload) {
+    stopDrawing();
+    clearInterval(state.timerId);
+    clearInterval(state.stayTimerId);
+    window.clearTimeout(state.toastTimerId);
+    window.clearTimeout(state.floorSwitcherTimerId);
+    state.current = { ...record, encuestador: payload.encuestador };
+    state.startedAt = new Date(record.hora_inicio || Date.now());
+    state.visitedFloors = new Set([state.selectedFloor]);
+    state.routeByFloor = {};
+    state.pendingPoints = [];
+    state.pendingEvents = [];
+    state.stay = null;
+    state.staysCount = 0;
+    state.staySecondsTotal = 0;
+    state.lastPoint = null;
+    state.lastCaptureAt = 0;
+    state.pinch = null;
+    state.pan = { x: 0, y: 0 };
+    state.mapLoaded = false;
+    clearCanvas();
+    hideLiftPanel();
+    hideStayPanel();
+    hideLiveLocationBadge();
+    hideMapMessage();
+    closeFloorSwitcher();
+    els.stayMarker.classList.add('hidden');
+    els.toastMessage.classList.add('hidden');
+    els.mainTimer.textContent = '00:00:00';
   }
 
   function loadFloor(floorId) {
@@ -471,8 +499,10 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       return;
     }
     if (event.pointerType === 'touch' && event.isPrimary === false) {
+      preventMapGesture(event);
       return;
     }
+    preventMapGesture(event);
     if (state.stay) {
       finishStay();
     }
@@ -480,12 +510,12 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     if (!point) {
       return;
     }
-    event.preventDefault();
     els.mapViewport.setPointerCapture(event.pointerId);
     hideLiftPanel();
     closeFloorSwitcher();
     hideLiveLocationBadge();
     state.isDrawing = true;
+    setMapTracingActive(true);
     state.activePointerId = event.pointerId;
     state.lastPoint = point;
     state.lastCaptureAt = 0;
@@ -496,7 +526,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     if (!state.isDrawing || event.pointerId !== state.activePointerId) {
       return;
     }
-    event.preventDefault();
+    preventMapGesture(event);
     const point = screenToMapCoordinates(event.clientX, event.clientY);
     if (!point) {
       hideLiveLocationBadge();
@@ -515,7 +545,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     if (!state.isDrawing || event.pointerId !== state.activePointerId) {
       return;
     }
-    event.preventDefault();
+    preventMapGesture(event);
     const point = screenToMapCoordinates(event.clientX, event.clientY);
     if (point) {
       addRoutePoint(point, 'FIN_SEGMENTO');
@@ -527,8 +557,31 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
   }
 
   function stopDrawing() {
+    const pointerId = state.activePointerId;
+    if (pointerId !== null && pointerId !== undefined && els.mapViewport.hasPointerCapture && els.mapViewport.hasPointerCapture(pointerId)) {
+      try {
+        els.mapViewport.releasePointerCapture(pointerId);
+      } catch (error) {
+        console.error(error);
+      }
+    }
     state.isDrawing = false;
     state.activePointerId = null;
+    setMapTracingActive(false);
+  }
+
+  function preventMapGesture(event) {
+    if (!state.current) {
+      return;
+    }
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+  }
+
+  function setMapTracingActive(active) {
+    document.documentElement.classList.toggle('map-tracing-active', Boolean(active));
+    document.body.classList.toggle('map-tracing-active', Boolean(active));
   }
 
   function addRoutePoint(point, tipo) {
