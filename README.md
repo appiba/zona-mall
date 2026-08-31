@@ -76,6 +76,7 @@ La primera version mantiene:
 - Persona Detenida y Pausa de Seguimiento;
 - cronometro de permanencia;
 - actividades por permanencia con color por motivo;
+- actividades contextuales por local, isla, zona de comida, vitrina o servicio;
 - local o lugar cercano editable con sugerencias de codigos visibles del mapa;
 - continuacion del mismo recorrido;
 - cambio de piso;

@@ -838,6 +838,33 @@ input {
   font-weight: 760;
 }
 
+.activity-panel-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 8px;
+}
+
+.activity-panel-heading span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.activity-panel-heading strong {
+  min-width: 0;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #eef4f1;
+  color: var(--green-strong);
+  font-size: 0.78rem;
+  font-weight: 950;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .activity-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

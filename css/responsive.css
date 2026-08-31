@@ -150,9 +150,15 @@
   }
 
   .stay-summary,
+  .activity-panel-heading,
   .panel-actions.two,
   .dialog-actions {
+    display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .activity-panel-heading strong {
+    text-align: left;
   }
 
   .activity-grid {

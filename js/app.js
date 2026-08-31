@@ -137,6 +137,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       'detectedLocation',
       'stayLocationInput',
       'locationDatalist',
+      'activityContextLabel',
       'activityButtons',
       'manualPauseBtn',
       'manualEventBtn',
@@ -362,15 +363,20 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     });
   }
 
-  function renderActivityButtons() {
+  function renderActivityButtons(activityIds) {
+    const list = activityIds && activityIds.length ? activityIds : ACTIVITIES;
+    const selected = new Set(state.stay ? state.stay.activities.map((entry) => entry.activity) : []);
     els.activityButtons.innerHTML = '';
-    ACTIVITIES.forEach((activity) => {
+    list.forEach((activity) => {
       const meta = getActivityMeta(activity);
       const button = document.createElement('button');
       button.type = 'button';
+      button.dataset.activity = activity;
       button.style.setProperty('--activity-color', meta.color);
       button.title = meta.description;
       button.textContent = meta.label;
+      button.classList.toggle('selected', selected.has(activity));
+      button.setAttribute('aria-pressed', selected.has(activity) ? 'true' : 'false');
       button.addEventListener('click', () => toggleStayActivity(activity, button));
       els.activityButtons.append(button);
     });
@@ -397,6 +403,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         nombre: name || code,
         piso: floor,
         tipo: item.tipo || '',
+        categoria: item.categoria || '',
         value
       });
     };
@@ -454,7 +461,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       const name = document.createElement('strong');
       name.textContent = location.nombre || location.codigo || 'Sin nombre';
       const type = document.createElement('span');
-      type.textContent = hasLocationPoint(location) ? locationTypeLabel(location.tipo) : 'Sin punto en mapa';
+      type.textContent = hasLocationPoint(location) ? location.categoria || locationTypeLabel(location.tipo) : 'Sin punto en mapa';
       text.append(name, type);
       button.append(code, text);
       button.addEventListener('click', () => selectLocationEntry(location));
@@ -537,6 +544,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         ...previous,
         codigo: previous.codigo || code,
         nombre: previous.nombre || name,
+        categoria: previous.categoria || item.categoria || '',
         piso: floorId,
         tipo: previous.tipo || item.tipo || 'LOCAL',
         x: hasLocationPoint(item) ? normalizedNumber(item.x) : previous.x,
@@ -915,6 +923,8 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       source: settings.source || '',
       location
     };
+    renderActivityButtons(getActivityIdsForStay(state.stay));
+    updateActivityContextLabel(state.stay);
     els.stayLocationInput.value = location ? formatLocationValue(location) : '';
     updateStayLocationDisplay();
     els.stayMarker.style.setProperty('--stay-color', getActivityMeta('OTRO').color);
@@ -1011,15 +1021,27 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     if (!state.stay) {
       return;
     }
-    els.activityButtons.querySelectorAll('button').forEach((item) => item.classList.remove('selected'));
+    const existingIndex = state.stay.activities.findIndex((entry) => entry.activity === activity);
     const meta = getActivityMeta(activity);
-    button.classList.add('selected');
-    state.stay.primaryActivity = activity;
-    els.stayMarker.style.setProperty('--stay-color', meta.color);
-    state.stay.activities.push({
-      activity,
-      timestamp: new Date().toISOString()
-    });
+    if (existingIndex >= 0) {
+      state.stay.activities.splice(existingIndex, 1);
+      button.classList.remove('selected');
+      button.setAttribute('aria-pressed', 'false');
+      if (state.stay.primaryActivity === activity) {
+        const last = state.stay.activities[state.stay.activities.length - 1];
+        state.stay.primaryActivity = last ? last.activity : '';
+      }
+    } else {
+      state.stay.activities.push({
+        activity,
+        timestamp: new Date().toISOString()
+      });
+      state.stay.primaryActivity = activity;
+      button.classList.add('selected');
+      button.setAttribute('aria-pressed', 'true');
+    }
+    const activeMeta = getActivityMeta(state.stay.primaryActivity || 'OTRO');
+    els.stayMarker.style.setProperty('--stay-color', activeMeta.color || meta.color);
   }
 
   function markFollowPause() {
@@ -1463,9 +1485,14 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     const index = {};
     state.locales.forEach((location) => {
       const key = `${floorLookupKey(location.piso)}|${String(location.codigo || '').toUpperCase()}`;
-      if (!index[key]) {
-        index[key] = location;
-      }
+      const previous = index[key] || {};
+      index[key] = {
+        ...location,
+        ...previous,
+        nombre: previous.nombre || location.nombre || '',
+        categoria: previous.categoria || location.categoria || '',
+        tipo: previous.tipo || location.tipo || ''
+      };
     });
 
     return Object.keys(pointsByFloor).flatMap((floorId) => (
@@ -1475,6 +1502,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         return {
           codigo: code,
           nombre: match.nombre || code,
+          categoria: match.categoria || '',
           tipo: match.tipo || 'LOCAL',
           piso: floorId,
           x: normalizedNumber(point.x),
@@ -1652,6 +1680,8 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.activityButtons.querySelectorAll('button').forEach((button) => button.classList.remove('selected'));
     els.stayLocationInput.value = '';
     els.detectedLocation.textContent = 'Sin local asociado';
+    els.activityContextLabel.textContent = getDefaultActivityContextLabel();
+    renderActivityButtons();
     els.saveStayBtn.disabled = true;
     els.saveStayBtn.textContent = 'Guardar permanencia';
   }
@@ -1661,7 +1691,10 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       return;
     }
     const location = resolveStayLocation(state.stay);
+    state.stay.location = location;
     els.detectedLocation.textContent = location.nombre || 'Sin local asociado';
+    renderActivityButtons(getActivityIdsForStay(state.stay));
+    updateActivityContextLabel(state.stay);
   }
 
   function resolveStayLocation(stay) {
@@ -1672,7 +1705,8 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         codigo: detected.codigo || '',
         nombre: detected.nombre || '',
         piso: detected.piso || stay.floor,
-        tipo: detected.tipo || ''
+        tipo: detected.tipo || '',
+        categoria: detected.categoria || ''
       };
     }
     const normalized = typed.toLowerCase();
@@ -1682,17 +1716,19 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     )) || (state.locationOptions || []).find((entry) => entry.value.toLowerCase() === normalized);
     if (match) {
       return {
-        codigo: match.codigo || detected.codigo || '',
-        nombre: match.nombre || typed,
-        piso: match.piso || stay.floor,
-        tipo: match.tipo || detected.tipo || ''
+          codigo: match.codigo || detected.codigo || '',
+          nombre: match.nombre || typed,
+          piso: match.piso || stay.floor,
+          tipo: match.tipo || detected.tipo || '',
+          categoria: match.categoria || detected.categoria || ''
       };
     }
     return {
       codigo: detected.codigo || '',
       nombre: typed,
       piso: stay.floor,
-      tipo: detected.tipo || ''
+      tipo: detected.tipo || '',
+      categoria: detected.categoria || ''
     };
   }
 
@@ -1718,6 +1754,36 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       color: '#475569',
       description: ''
     };
+  }
+
+  function getActivityIdsForStay(stay) {
+    const base = ACTIVITY_META && ACTIVITY_META.forLocation
+      ? ACTIVITY_META.forLocation((stay && stay.location) || {})
+      : ACTIVITIES;
+    const ids = [...base];
+    ((stay && stay.activities) || []).forEach((entry) => {
+      if (entry.activity && !ids.includes(entry.activity)) {
+        ids.push(entry.activity);
+      }
+    });
+    return ids;
+  }
+
+  function updateActivityContextLabel(stay) {
+    els.activityContextLabel.textContent = getActivityContextLabel(stay);
+  }
+
+  function getActivityContextLabel(stay) {
+    if (ACTIVITY_META && ACTIVITY_META.profileForLocation && ACTIVITY_META.profileLabel) {
+      return ACTIVITY_META.profileLabel(ACTIVITY_META.profileForLocation((stay && stay.location) || {}));
+    }
+    return getDefaultActivityContextLabel();
+  }
+
+  function getDefaultActivityContextLabel() {
+    return ACTIVITY_META && ACTIVITY_META.profileLabel
+      ? ACTIVITY_META.profileLabel('GENERAL')
+      : 'Actividades generales';
   }
 
   function showToast(message, isWarning) {
