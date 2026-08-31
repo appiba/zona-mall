@@ -86,7 +86,7 @@
     right: 20px;
   }
 
-  .floor-switch-panel {
+  .map-side-stack {
     position: fixed;
     top: auto;
     left: max(12px, env(safe-area-inset-left));
@@ -94,11 +94,20 @@
     bottom: calc(132px + env(safe-area-inset-bottom));
     width: auto;
     max-height: min(260px, calc(100dvh - 180px));
+  }
+
+  .floor-switch-panel {
+    width: auto;
+    max-height: min(260px, calc(100dvh - 180px));
     overflow: auto;
     opacity: 0;
     pointer-events: none;
     transform: translateY(12px);
     transition: opacity 160ms ease, transform 160ms ease;
+  }
+
+  .local-legend-panel {
+    display: none;
   }
 
   .floor-switch-panel.open,
@@ -113,9 +122,31 @@
   }
 
   .floor-quick-options {
-    grid-template-columns: repeat(5, minmax(92px, 1fr));
-    overflow-x: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     padding-bottom: 2px;
+  }
+
+  .local-marker {
+    min-width: 30px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: transparent;
+    font-size: 0;
+  }
+
+  .local-marker::before {
+    display: none;
+  }
+
+  .local-marker::after {
+    content: "";
+    display: block;
+    width: 8px;
+    height: 8px;
+    margin: auto;
+    border-radius: 50%;
+    background: #ffffff;
   }
 
   .stay-summary,
@@ -128,8 +159,13 @@
     max-height: 250px;
   }
 
+  .action-panel,
+  .stay-panel {
+    bottom: calc(136px + env(safe-area-inset-bottom));
+  }
+
   .bottom-bar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -144,6 +180,7 @@
   }
 
   .bottom-bar {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     padding-top: 6px;
     padding-bottom: 6px;
   }
@@ -155,16 +192,20 @@
     min-height: 42px;
   }
 
+  .action-panel,
   .stay-panel {
     left: auto;
     width: min(430px, 42vw);
     bottom: calc(68px + env(safe-area-inset-bottom));
   }
 
-  .floor-switch-panel {
+  .map-side-stack {
     top: auto;
     bottom: calc(66px + env(safe-area-inset-bottom));
     width: min(236px, calc(100% - 40px));
+  }
+
+  .floor-switch-panel {
     padding: 8px;
   }
 

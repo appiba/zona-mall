@@ -43,7 +43,8 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     pan: { x: 0, y: 0 },
     pinch: null,
     mapLoaded: false,
-    locationOptions: []
+    locationOptions: [],
+    localSearchTerm: ''
   };
 
   const els = {};
@@ -59,6 +60,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     renderFloorButtons();
     renderManualEventOptions();
     renderLocationOptions();
+    renderLocalNavigation();
     callServer('initApp')
       .then((app) => {
         state.app = app;
@@ -77,6 +79,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         renderFloorButtons();
         renderManualEventOptions();
         renderLocationOptions();
+        renderLocalNavigation();
       })
       .catch((error) => {
         showSetupStatus('No se pudo conectar con Google en este momento. Puedes escoger el encuestador y el piso, pero revisa internet antes de iniciar.');
@@ -117,9 +120,15 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       'mapViewport',
       'mapImage',
       'drawCanvas',
+      'localMarkers',
       'liveLocationBadge',
       'stayMarker',
       'mapMessage',
+      'localLegendPanel',
+      'localLegendTitle',
+      'localLegendCount',
+      'localSearchInput',
+      'localLegendList',
       'liftPanel',
       'startStayBtn',
       'pauseFollowBtn',
@@ -132,7 +141,11 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       'manualPauseBtn',
       'manualEventBtn',
       'changeFloorBtn',
+      'correctionBtn',
       'finishBtn',
+      'correctionPanel',
+      'undoStepBtn',
+      'resetCurrentBtn',
       'eventDialog',
       'manualEventSelect',
       'manualEventObservation',
@@ -164,10 +177,12 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       hideMapMessage();
       resizeCanvas();
       replayFloor();
+      renderLocalNavigation();
     });
     els.mapImage.addEventListener('error', () => {
       state.mapLoaded = false;
       resizeCanvas();
+      renderLocalMarkers();
       showMapMessage(`Agrega la imagen oficial para ${getFloorLabel(state.selectedFloor)} en CONFIG antes de dibujar.`);
     });
     window.addEventListener('resize', () => {
@@ -177,6 +192,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       if (state.lastPoint) {
         updateLiveLocation(state.lastPoint);
       }
+      renderLocalNavigation();
       syncFloorSwitcherMode();
     });
     document.addEventListener('visibilitychange', () => {
@@ -185,19 +201,26 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
         showLiftPanel();
       }
     });
-    els.startStayBtn.addEventListener('click', startStayFromLastPoint);
+    els.startStayBtn.addEventListener('click', () => startStayFromLastPoint());
     els.pauseFollowBtn.addEventListener('click', markFollowPause);
     els.manualPauseBtn.addEventListener('click', markManualPause);
     els.manualEventBtn.addEventListener('click', () => openDialog(els.eventDialog));
     els.saveManualEventBtn.addEventListener('click', saveManualEvent);
     els.saveStayBtn.addEventListener('click', () => finishStay({ manual: true }));
     els.changeFloorBtn.addEventListener('click', highlightFloorSwitcher);
+    els.correctionBtn.addEventListener('click', toggleCorrectionPanel);
+    els.undoStepBtn.addEventListener('click', undoLastStep);
+    els.resetCurrentBtn.addEventListener('click', resetCurrentTracking);
     els.finishBtn.addEventListener('click', finishTracking);
     els.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.2));
     els.zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.2));
     els.zoomResetBtn.addEventListener('click', () => setZoom(1));
     els.surveyorSelect.addEventListener('input', updateSurveyorButtonStates);
     els.stayLocationInput.addEventListener('input', updateStayLocationDisplay);
+    els.localSearchInput.addEventListener('input', () => {
+      state.localSearchTerm = els.localSearchInput.value;
+      renderLocalLegend();
+    });
     setInterval(flushAll, getNumberConfig('AUTO_SAVE_INTERVAL', 5000));
   }
 
@@ -303,6 +326,21 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.changeFloorBtn.setAttribute('aria-expanded', 'false');
   }
 
+  function toggleCorrectionPanel() {
+    if (!state.current) {
+      return;
+    }
+    closeFloorSwitcher();
+    const nextOpen = els.correctionPanel.classList.contains('hidden');
+    els.correctionPanel.classList.toggle('hidden', !nextOpen);
+    els.correctionBtn.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+  }
+
+  function hideCorrectionPanel() {
+    els.correctionPanel.classList.add('hidden');
+    els.correctionBtn.setAttribute('aria-expanded', 'false');
+  }
+
   function syncFloorSwitcherMode() {
     if (!isCompactViewport()) {
       closeFloorSwitcher();
@@ -375,6 +413,190 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     });
   }
 
+  function renderLocalNavigation() {
+    renderLocalLegend();
+    renderLocalMarkers();
+  }
+
+  function renderLocalLegend() {
+    const locations = getFloorLocations();
+    const term = normalizeSearch(state.localSearchTerm);
+    const filtered = locations.filter((location) => {
+      if (!term) {
+        return true;
+      }
+      return normalizeSearch(`${location.codigo} ${location.nombre} ${location.tipo}`).includes(term);
+    });
+    els.localLegendTitle.textContent = getFloorLabel(state.selectedFloor);
+    els.localLegendCount.textContent = String(locations.length);
+    els.localLegendList.innerHTML = '';
+    if (!filtered.length) {
+      const empty = document.createElement('div');
+      empty.className = 'local-legend-empty';
+      empty.textContent = 'Sin locales para mostrar en este piso.';
+      els.localLegendList.append(empty);
+      return;
+    }
+    filtered.forEach((location) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'local-legend-item';
+      button.classList.toggle('selected', isSelectedLocation(location));
+      button.disabled = !hasLocationPoint(location);
+      button.style.setProperty('--marker-color', locationMarkerColor(location));
+      button.title = hasLocationPoint(location)
+        ? `Marcar ${formatLocationValue(location)}`
+        : `${formatLocationValue(location)} sin punto configurado`;
+
+      const code = document.createElement('b');
+      code.textContent = location.codigo || 'Zona';
+      const text = document.createElement('div');
+      const name = document.createElement('strong');
+      name.textContent = location.nombre || location.codigo || 'Sin nombre';
+      const type = document.createElement('span');
+      type.textContent = hasLocationPoint(location) ? locationTypeLabel(location.tipo) : 'Sin punto en mapa';
+      text.append(name, type);
+      button.append(code, text);
+      button.addEventListener('click', () => selectLocationEntry(location));
+      els.localLegendList.append(button);
+    });
+  }
+
+  function renderLocalMarkers() {
+    els.localMarkers.innerHTML = '';
+    if (!state.mapLoaded) {
+      return;
+    }
+    getFloorLocations()
+      .filter(hasLocationPoint)
+      .forEach((location) => {
+        const screen = mapToScreenCoordinates(location.x, location.y);
+        if (!screen) {
+          return;
+        }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'local-marker';
+        button.classList.toggle('selected', isSelectedLocation(location));
+        button.style.left = `${screen.x}px`;
+        button.style.top = `${screen.y}px`;
+        button.style.setProperty('--marker-color', locationMarkerColor(location));
+        button.dataset.label = formatLocationValue(location);
+        button.setAttribute('aria-label', `Marcar ${formatLocationValue(location)}`);
+        button.textContent = location.codigo || '*';
+        button.title = `Marcar ${formatLocationValue(location)}`;
+        button.addEventListener('pointerdown', stopLocalMarkerEvent);
+        button.addEventListener('touchstart', stopLocalMarkerEvent, { passive: false });
+        button.addEventListener('click', (event) => {
+          stopLocalMarkerEvent(event);
+          selectLocationEntry(location);
+        });
+        els.localMarkers.append(button);
+      });
+  }
+
+  function selectLocationEntry(location) {
+    if (!state.current || !state.mapLoaded || !hasLocationPoint(location)) {
+      return;
+    }
+    stopDrawing();
+    closeFloorSwitcher();
+    hideCorrectionPanel();
+    if (state.stay) {
+      cancelActiveStay({ removeQuickPoint: state.stay.source === 'QUICK_LOCAL' });
+    }
+    const point = normalizeCoordinates(location.x, location.y);
+    addRoutePoint(point, 'LOCAL_SELECCIONADO');
+    startStayFromLastPoint({ source: 'QUICK_LOCAL', location });
+    renderLocalNavigation();
+    showToast(`${formatLocationValue(location)} marcado. Escoge actividad y guarda la permanencia.`);
+  }
+
+  function stopLocalMarkerEvent(event) {
+    event.stopPropagation();
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+  }
+
+  function getFloorLocations() {
+    const floorId = state.selectedFloor;
+    const locations = new Map();
+    const addLocation = (item) => {
+      if (!item || !matchesFloor(item.piso, floorId)) {
+        return;
+      }
+      const code = String(item.codigo || '').trim();
+      const name = String(item.nombre || code || '').trim();
+      if (!code && !name) {
+        return;
+      }
+      const key = `${floorLookupKey(item.piso)}|${(code || name).toUpperCase()}`;
+      const previous = locations.get(key) || {};
+      locations.set(key, {
+        ...previous,
+        codigo: previous.codigo || code,
+        nombre: previous.nombre || name,
+        piso: floorId,
+        tipo: previous.tipo || item.tipo || 'LOCAL',
+        x: hasLocationPoint(item) ? normalizedNumber(item.x) : previous.x,
+        y: hasLocationPoint(item) ? normalizedNumber(item.y) : previous.y,
+        radius: Number(item.radius || previous.radius || getNumberConfig('NEARBY_LOCATION_DISTANCE', 0.045))
+      });
+    };
+    state.locales.forEach(addLocation);
+    state.zones.forEach(addLocation);
+    state.locationPoints.forEach(addLocation);
+    return Array.from(locations.values()).sort(compareLocations);
+  }
+
+  function compareLocations(a, b) {
+    const aType = locationSortWeight(a);
+    const bType = locationSortWeight(b);
+    if (aType !== bType) {
+      return aType - bType;
+    }
+    return String(a.codigo || a.nombre).localeCompare(String(b.codigo || b.nombre), 'es', { numeric: true });
+  }
+
+  function locationSortWeight(location) {
+    const type = String(location.tipo || '').toUpperCase();
+    if (type === 'ZONA') return 0;
+    if (type === 'PARQUEADERO') return 2;
+    return 1;
+  }
+
+  function hasLocationPoint(location) {
+    return Boolean(location) && Number.isFinite(Number(location.x)) && Number.isFinite(Number(location.y));
+  }
+
+  function locationMarkerColor(location) {
+    const type = String(location.tipo || '').toUpperCase();
+    if (type === 'ZONA') return '#12664a';
+    if (type === 'PARQUEADERO') return '#1769aa';
+    return '#b98218';
+  }
+
+  function locationTypeLabel(type) {
+    const normalized = String(type || '').toUpperCase();
+    if (normalized === 'ZONA') return 'Zona';
+    if (normalized === 'PARQUEADERO') return 'Parqueadero';
+    return 'Local';
+  }
+
+  function normalizeSearch(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function isSelectedLocation(location) {
+    const point = state.stay ? state.stay.point : state.lastPoint;
+    return Boolean(point && hasLocationPoint(location) && Math.hypot(point.x - location.x, point.y - location.y) < 0.008);
+  }
+
   function startNewPerson(event) {
     event.preventDefault();
     if (!state.selectedFloor) {
@@ -437,6 +659,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     hideLiveLocationBadge();
     hideMapMessage();
     closeFloorSwitcher();
+    hideCorrectionPanel();
     els.stayMarker.classList.add('hidden');
     els.toastMessage.classList.add('hidden');
     els.mainTimer.textContent = '00:00:00';
@@ -446,12 +669,15 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     const map = getMap(floorId);
     state.selectedFloor = floorId;
     state.visitedFloors.add(floorId);
+    state.localSearchTerm = '';
+    els.localSearchInput.value = '';
     els.floorBadge.textContent = map ? map.label : floorId;
     updateFloorButtonStates();
     resetZoom();
     hideLiftPanel();
     hideStayPanel();
     hideLiveLocationBadge();
+    hideCorrectionPanel();
     state.mapLoaded = false;
     els.mapImage.removeAttribute('src');
     if (map && map.src && map.src.startsWith('data:')) {
@@ -473,6 +699,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     }
     resizeCanvas();
     replayFloor();
+    renderLocalNavigation();
   }
 
   function changeFloor(nextFloor) {
@@ -513,6 +740,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.mapViewport.setPointerCapture(event.pointerId);
     hideLiftPanel();
     closeFloorSwitcher();
+    hideCorrectionPanel();
     hideLiveLocationBadge();
     state.isDrawing = true;
     setMapTracingActive(true);
@@ -609,6 +837,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     state.lastPoint = routePoint;
     state.lastCaptureAt = Date.now();
     updateLiveLocation(routePoint);
+    return routePoint;
   }
 
   function drawTemporarySegment(from, to) {
@@ -665,13 +894,15 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     state.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  function startStayFromLastPoint() {
+  function startStayFromLastPoint(options) {
     if (!state.lastPoint) {
       return;
     }
+    const settings = options || {};
     hideLiftPanel();
     hideLiveLocationBadge();
-    const location = detectLocation(state.lastPoint);
+    hideCorrectionPanel();
+    const location = settings.location || detectLocation(state.lastPoint);
     state.stay = {
       permanencia_id: cryptoRandomId(),
       point: { x: state.lastPoint.x, y: state.lastPoint.y },
@@ -679,6 +910,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
       startedAt: new Date(),
       activities: [],
       primaryActivity: '',
+      source: settings.source || '',
       location
     };
     els.stayLocationInput.value = location ? formatLocationValue(location) : '';
@@ -799,6 +1031,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     if (!state.current) {
       return;
     }
+    hideCorrectionPanel();
     queueEvent({ actividad: 'PAUSA', observacion: getFloorLabel(state.selectedFloor) });
     flushEvents();
   }
@@ -813,7 +1046,182 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     });
     els.manualEventObservation.value = '';
     closeDialog(els.eventDialog);
+    hideCorrectionPanel();
     flushEvents();
+  }
+
+  function undoLastStep() {
+    if (!state.current) {
+      return;
+    }
+    closeFloorSwitcher();
+    if (state.stay) {
+      const removedPoint = cancelActiveStay({ removeQuickPoint: state.stay.source === 'QUICK_LOCAL' });
+      renderLocalMarkers();
+      showToast(removedPoint ? 'Local seleccionado borrado.' : 'Permanencia actual cancelada.');
+      return;
+    }
+    const removedPoint = removeLastRoutePoint(state.selectedFloor);
+    if (!removedPoint) {
+      hideLiftPanel();
+      hideLiveLocationBadge();
+      showToast('No hay pasos para borrar en este mapa.', true);
+      return;
+    }
+    const points = state.routeByFloor[state.selectedFloor] || [];
+    state.lastPoint = points[points.length - 1] || null;
+    replayFloor();
+    renderLocalMarkers();
+    if (state.lastPoint) {
+      updateLiveLocation(state.lastPoint);
+      showLiftPanel();
+    } else {
+      hideLiftPanel();
+      hideLiveLocationBadge();
+    }
+    showToast('Ultimo paso borrado.');
+  }
+
+  function removeLastRoutePoint(floorId) {
+    const points = state.routeByFloor[floorId] || [];
+    if (!points.length) {
+      return null;
+    }
+    const removedPoint = points.pop();
+    if (!removePendingRoutePoint(floorId, removedPoint)) {
+      deleteSavedRoutePoint(floorId, removedPoint);
+    }
+    return removedPoint;
+  }
+
+  function removePendingRoutePoint(floorId, point) {
+    for (let index = state.pendingPoints.length - 1; index >= 0; index -= 1) {
+      const pending = state.pendingPoints[index];
+      if (
+        pending.persona_id === state.current.persona_id &&
+        pending.piso === floorId &&
+        pending.timestamp === point.timestamp &&
+        pending.tipo === point.tipo
+      ) {
+        state.pendingPoints.splice(index, 1);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function deleteSavedRoutePoint(floorId, point) {
+    const payload = {
+      persona_id: state.current.persona_id,
+      recorrido_id: state.current.recorrido_id || '',
+      piso: floorId,
+      timestamp: point.timestamp,
+      tipo: point.tipo
+    };
+    callServer('deleteRoutePoint', payload).catch((error) => {
+      console.error(error);
+      if (!isUnknownApiAction(error)) {
+        queueOffline('deleteRoutePoint', payload);
+      }
+    });
+  }
+
+  function cancelActiveStay(options) {
+    const settings = options || {};
+    const stay = state.stay;
+    clearInterval(state.stayTimerId);
+    state.stay = null;
+    hideStayPanel();
+    els.stayMarker.classList.add('hidden');
+    const removedPoint = settings.removeQuickPoint && stay && stay.floor
+      ? removeLastRoutePoint(stay.floor)
+      : null;
+    if (removedPoint) {
+      const points = state.routeByFloor[stay.floor] || [];
+      state.lastPoint = points[points.length - 1] || null;
+    }
+    replayFloor();
+    if (state.lastPoint) {
+      updateLiveLocation(state.lastPoint);
+      showLiftPanel();
+    } else {
+      hideLiftPanel();
+      hideLiveLocationBadge();
+    }
+    return removedPoint;
+  }
+
+  function resetCurrentTracking() {
+    if (!state.current) {
+      return;
+    }
+    const current = state.current;
+    const ok = confirm(`Reiniciar todo el recorrido de ${current.persona_id}? Se limpiara la pantalla y este registro quedara como descartado.`);
+    if (!ok) {
+      return;
+    }
+    const payload = {
+      persona_id: current.persona_id,
+      recorrido_id: current.recorrido_id || '',
+      duracion_total: state.startedAt ? Math.max(0, Math.round((Date.now() - state.startedAt.getTime()) / 1000)) : 0,
+      pisos_visitados: Array.from(state.visitedFloors),
+      numero_permanencias: state.staysCount,
+      tiempo_total_permanencia: state.staySecondsTotal,
+      motivo: 'REINICIO_MANUAL'
+    };
+    callServer('cancelPerson', payload).catch((error) => {
+      console.error(error);
+      if (!isUnknownApiAction(error)) {
+        queueOffline('cancelPerson', payload);
+      }
+    });
+    resetTrackingToSetup();
+    showSetupStatus('Recorrido reiniciado. Puedes iniciar un nuevo encuestado.');
+  }
+
+  function resetTrackingToSetup() {
+    stopDrawing();
+    clearInterval(state.timerId);
+    clearInterval(state.stayTimerId);
+    window.clearTimeout(state.toastTimerId);
+    window.clearTimeout(state.floorSwitcherTimerId);
+    state.current = null;
+    state.routeByFloor = {};
+    state.pendingPoints = [];
+    state.pendingEvents = [];
+    state.stay = null;
+    state.staysCount = 0;
+    state.staySecondsTotal = 0;
+    state.visitedFloors = new Set();
+    state.startedAt = null;
+    state.lastPoint = null;
+    state.lastCaptureAt = 0;
+    state.pinch = null;
+    state.pan = { x: 0, y: 0 };
+    state.mapLoaded = false;
+    state.localSearchTerm = '';
+    els.localSearchInput.value = '';
+    resetZoom();
+    clearCanvas();
+    hideLiftPanel();
+    hideStayPanel();
+    hideLiveLocationBadge();
+    hideMapMessage();
+    closeFloorSwitcher();
+    hideCorrectionPanel();
+    els.stayMarker.classList.add('hidden');
+    els.toastMessage.classList.add('hidden');
+    els.mapImage.removeAttribute('src');
+    els.personBadge.textContent = 'P0000';
+    els.floorBadge.textContent = 'Piso';
+    els.surveyorBadge.textContent = 'E00';
+    els.mainTimer.textContent = '00:00:00';
+    els.trackerView.classList.add('hidden');
+    els.setupView.classList.remove('hidden');
+  }
+
+  function isUnknownApiAction(error) {
+    return String(error && error.message ? error.message : error).includes('Accion API no reconocida');
   }
 
   function queueEvent(event) {
@@ -1144,6 +1552,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     els.drawCanvas.style.transform = `scale(${state.zoom})`;
     replayFloor();
     positionStayMarker();
+    renderLocalMarkers();
     if (state.lastPoint) {
       updateLiveLocation(state.lastPoint);
     }
@@ -1153,6 +1562,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     state.zoom = 1;
     els.mapImage.style.transform = 'scale(1)';
     els.drawCanvas.style.transform = 'scale(1)';
+    renderLocalMarkers();
   }
 
   function startMainTimer() {

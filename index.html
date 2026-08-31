@@ -93,6 +93,7 @@
         <div id="mapViewport" class="map-viewport">
           <img id="mapImage" alt="Mapa del centro comercial">
           <canvas id="drawCanvas"></canvas>
+          <div id="localMarkers" class="local-markers" aria-label="Locales marcables"></div>
           <div id="liveLocationBadge" class="live-location-badge hidden">
             <span>Local cercano</span>
             <strong></strong>
@@ -107,12 +108,26 @@
           <button id="zoomInBtn" class="icon-button" type="button" title="Acercar">+</button>
         </div>
 
-        <div id="floorSwitchPanel" class="floor-switch-panel" aria-label="Cambiar piso">
-          <div class="floor-switch-heading">
-            <span>Cambiar piso</span>
-            <strong id="quickFloorLabel">Piso</strong>
+        <div class="map-side-stack">
+          <div id="floorSwitchPanel" class="floor-switch-panel" aria-label="Cambiar piso">
+            <div class="floor-switch-heading">
+              <span>Cambiar piso</span>
+              <strong id="quickFloorLabel">Piso</strong>
+            </div>
+            <div id="floorQuickOptions" class="floor-quick-options"></div>
           </div>
-          <div id="floorQuickOptions" class="floor-quick-options"></div>
+
+          <aside id="localLegendPanel" class="local-legend-panel" aria-label="Simbologia de locales">
+            <div class="local-legend-heading">
+              <div>
+                <span>Simbologia</span>
+                <strong id="localLegendTitle">Locales del piso</strong>
+              </div>
+              <small id="localLegendCount">0</small>
+            </div>
+            <input id="localSearchInput" class="local-search-input" type="search" placeholder="Buscar local">
+            <div id="localLegendList" class="local-legend-list"></div>
+          </aside>
         </div>
       </section>
 
@@ -143,12 +158,21 @@
         </div>
       </aside>
 
+      <aside id="correctionPanel" class="action-panel correction-panel hidden">
+        <p>Corregir recorrido</p>
+        <div class="panel-actions two">
+          <button id="undoStepBtn" type="button">Borrar ultimo paso</button>
+          <button id="resetCurrentBtn" class="danger-action" type="button">Reiniciar todo</button>
+        </div>
+      </aside>
+
       <div id="toastMessage" class="toast-message hidden"></div>
 
       <nav class="bottom-bar" aria-label="Acciones del recorrido">
         <button id="manualPauseBtn" type="button">Pausa</button>
         <button id="manualEventBtn" type="button">Evento</button>
         <button id="changeFloorBtn" type="button" aria-expanded="false" aria-controls="floorSwitchPanel">Piso</button>
+        <button id="correctionBtn" type="button" aria-expanded="false" aria-controls="correctionPanel">Corregir</button>
         <button id="finishBtn" class="danger-action" type="button">Finalizar</button>
       </nav>
     </section>

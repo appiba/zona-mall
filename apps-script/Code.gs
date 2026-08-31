@@ -156,10 +156,12 @@ function dispatchApiAction_(action, payload) {
     initApp: () => initApp(),
     createPerson: () => createPerson(payload),
     saveRoutePoints: () => saveRoutePoints(payload),
+    deleteRoutePoint: () => deleteRoutePoint(payload),
     savePermanencia: () => savePermanencia(payload),
     saveEvents: () => saveEvents(payload),
     recordFloorChange: () => recordFloorChange(payload),
     finalizePerson: () => finalizePerson(payload),
+    cancelPerson: () => cancelPerson(payload),
     getDashboardData: () => getDashboardData(payload),
     getMapData: () => getMapData(payload),
     syncMapFileIdsByName: () => syncMapFileIdsByName(),
@@ -209,14 +211,20 @@ function getDashboardData(payload) {
     id: map.id,
     label: map.label
   }));
-  const personas = getRows_('PERSONAS');
-  const recorridos = getRows_('RECORRIDOS');
+  const allPersonas = getRows_('PERSONAS');
+  const discardedPersonIds = new Set(allPersonas
+    .filter((row) => isDiscardedState_(row.estado))
+    .map((row) => row.persona_id)
+    .filter(Boolean));
+  const personas = allPersonas.filter((row) => !discardedPersonIds.has(row.persona_id));
+  const recorridos = getRows_('RECORRIDOS').filter((row) => !discardedPersonIds.has(row.persona_id));
   const permanencias = getRows_('PERMANENCIAS').filter((row) => (
     isFinite(Number(row.x)) &&
     isFinite(Number(row.y)) &&
-    row.persona_id
+    row.persona_id &&
+    !discardedPersonIds.has(row.persona_id)
   ));
-  const eventos = getRows_('EVENTOS');
+  const eventos = getRows_('EVENTOS').filter((row) => !discardedPersonIds.has(row.persona_id));
   const permanenciaById = {};
   permanencias.forEach((row) => {
     permanenciaById[row.permanencia_id] = row;
@@ -320,6 +328,21 @@ function saveRoutePoints(points) {
     ]);
   appendValues_('PUNTOS_RUTA', values);
   return { saved: values.length };
+}
+
+function deleteRoutePoint(payload) {
+  ensureDatabase();
+  if (!payload || !payload.persona_id || !payload.timestamp) {
+    throw new Error('persona_id y timestamp requeridos para borrar punto');
+  }
+  const deleted = deleteRowsByMatch_('PUNTOS_RUTA', {
+    persona_id: payload.persona_id,
+    recorrido_id: payload.recorrido_id || '',
+    piso: payload.piso || '',
+    timestamp: payload.timestamp,
+    tipo: payload.tipo || ''
+  });
+  return { deleted };
 }
 
 function savePermanencia(permanencia) {
@@ -449,6 +472,44 @@ function finalizePerson(payload) {
   return { finalized: true };
 }
 
+function cancelPerson(payload) {
+  ensureDatabase();
+  const now = new Date();
+  const personaId = payload.persona_id;
+  if (!personaId) {
+    throw new Error('persona_id requerido para descartar recorrido');
+  }
+  const duration = Number(payload.duracion_total || 0);
+  const personaUpdated = updateRowByKey_('PERSONAS', 'persona_id', personaId, {
+    hora_final: formatTime_(now),
+    duracion_total: duration,
+    estado: 'DESCARTADA'
+  });
+  const routeUpdated = updateRowByKey_('RECORRIDOS', 'persona_id', personaId, {
+    hora_final: formatTime_(now),
+    duracion_total: duration,
+    pisos_visitados: (payload.pisos_visitados || []).join(', '),
+    numero_permanencias: Number(payload.numero_permanencias || 0),
+    tiempo_total_permanencia: Number(payload.tiempo_total_permanencia || 0),
+    estado: 'DESCARTADO'
+  });
+  updateRowByKey_('SESIONES', 'persona_id', personaId, {
+    fin: now.toISOString(),
+    estado: 'DESCARTADA'
+  });
+  saveEvents([{
+    persona_id: personaId,
+    timestamp: now.toISOString(),
+    actividad: 'DESCARTAR_RECORRIDO',
+    observacion: payload.motivo || 'Reinicio manual de captura'
+  }]);
+  return {
+    cancelled: true,
+    personaUpdated,
+    routeUpdated
+  };
+}
+
 function getConfigObject_() {
   const sheet = getSpreadsheet_().getSheetByName('CONFIG');
   const values = sheet.getDataRange().getValues();
@@ -568,6 +629,11 @@ function buildDashboardTotals_(personas, recorridos, permanencias, eventos, floo
     interactions: eventos.length,
     floorsWithData: floors.filter((floor) => floor.metrics.stays > 0).length
   };
+}
+
+function isDiscardedState_(state) {
+  const normalized = String(state || '').toUpperCase();
+  return normalized === 'DESCARTADA' || normalized === 'DESCARTADO' || normalized === 'CANCELADA' || normalized === 'CANCELADO';
 }
 
 function buildEventsByStay_(events) {
@@ -831,6 +897,25 @@ function updateRowByKey_(sheetName, keyHeader, keyValue, updates) {
     }
   }
   return false;
+}
+
+function deleteRowsByMatch_(sheetName, criteria) {
+  const sheet = getSpreadsheet_().getSheetByName(sheetName);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0] || [];
+  const keys = Object.keys(criteria || {});
+  let deleted = 0;
+  for (let rowIndex = values.length - 1; rowIndex >= 1; rowIndex -= 1) {
+    const matches = keys.every((key) => {
+      const columnIndex = headers.indexOf(key);
+      return columnIndex !== -1 && String(values[rowIndex][columnIndex]) === String(criteria[key]);
+    });
+    if (matches) {
+      sheet.deleteRow(rowIndex + 1);
+      deleted += 1;
+    }
+  }
+  return deleted;
 }
 
 function updateConfigValue_(key, value) {
