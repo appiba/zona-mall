@@ -11,6 +11,7 @@
     selectedFloorId: null,
     authenticated: false,
     localDirectory: [],
+    localStatsIndex: {},
     localFilters: {
       search: '',
       floor: '',
@@ -73,7 +74,7 @@
     els.loginForm.addEventListener('submit', handleLogin);
     els.logoutBtn.addEventListener('click', () => showLogin(true));
     els.refreshBtn.addEventListener('click', loadDashboard);
-    els.printBtn.addEventListener('click', () => window.print());
+    els.printBtn.addEventListener('click', printReport);
     els.adminMapImage.addEventListener('load', renderHeatmap);
     els.newLocalBtn.addEventListener('click', clearLocalForm);
     els.clearLocalFormBtn.addEventListener('click', clearLocalForm);
@@ -91,6 +92,7 @@
       renderLocalDirectory();
     });
     window.addEventListener('resize', renderHeatmap);
+    window.addEventListener('beforeprint', preparePrintReport);
     renderLocalEditorOptions();
     if (hasValidAdminSession()) {
       unlockAdmin();
@@ -187,6 +189,22 @@
     els.loginError.textContent = message;
   }
 
+  function printReport() {
+    preparePrintReport();
+    window.requestAnimationFrame(() => window.print());
+  }
+
+  function preparePrintReport() {
+    state.localFilters.search = '';
+    state.localFilters.floor = '';
+    state.localFilters.category = '';
+    els.localAdminSearch.value = '';
+    els.localFloorFilter.value = '';
+    els.localCategoryFilter.value = '';
+    renderLocalDirectory();
+    renderHeatmap();
+  }
+
   function loadLocalDirectory() {
     setDirectoryStatus('Cargando directorio de locales...');
     window.ZonarAPI.call('getLocalDirectory', {})
@@ -246,9 +264,11 @@
       return;
     }
     rows.forEach((local) => {
+      const stats = localStatsFor(local);
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'directory-item';
+      button.classList.toggle('has-data', stats.stays > 0);
       button.classList.toggle('inactive', String(local.activo || 'SI').toUpperCase() === 'NO');
       button.style.setProperty('--directory-color', localTypeColor(local.tipo));
       button.title = `Editar ${local.nombre || local.codigo}`;
@@ -262,7 +282,24 @@
       name.textContent = local.nombre || 'Sin nombre';
       const meta = document.createElement('span');
       meta.textContent = `${floorLabel(local.piso)} · ${local.categoria || localTypeLabel(local.tipo)} · ${localTypeLabel(local.tipo)}`;
-      text.append(name, meta);
+      const statGrid = document.createElement('div');
+      statGrid.className = 'directory-stats';
+      statGrid.innerHTML = `
+        <b><em>${numberLabel(stats.stays)}</em><small>Permanencias</small></b>
+        <b><em>${numberLabel(stats.visitors)}</em><small>Visitantes</small></b>
+        <b><em>${percentLabel(stats.percentage)}</em><small>Del total</small></b>
+      `;
+      const activity = document.createElement('p');
+      activity.className = 'directory-activity';
+      activity.textContent = stats.stays
+        ? `Actividad: ${stats.activities.length ? stats.activities.map((item) => `${activityLabel(item.name)} ${item.count}`).join(' · ') : 'Sin actividad marcada'}`
+        : 'Sin permanencias registradas';
+      const people = document.createElement('p');
+      people.className = 'directory-people';
+      people.textContent = stats.people.length
+        ? `Estuvieron: ${stats.people.map((item) => item.label).join(', ')}${stats.extraPeople ? ` y ${stats.extraPeople} mas` : ''}`
+        : 'Sin visitantes asociados todavia';
+      text.append(name, meta, statGrid, activity, people);
 
       button.append(code, text);
       button.addEventListener('click', () => fillLocalForm(local));
@@ -454,6 +491,116 @@
     els.localDirectoryStatus.classList.toggle('error', Boolean(isError));
   }
 
+  function buildLocalStatsIndex(data) {
+    const index = {};
+    const totals = (data && data.totals) || {};
+    const totalStays = Number(totals.stays || 0);
+    ((data && data.floors) || []).forEach((floor) => {
+      (floor.heatPoints || []).forEach((point) => {
+        const code = String(point.local_codigo || '').trim().toUpperCase();
+        const name = String(point.local_nombre || '').trim();
+        if (!code && !name) {
+          return;
+        }
+        const key = localStatsKey(floor.id, code || normalizeText(name));
+        if (!index[key]) {
+          index[key] = {
+            piso: floor.id,
+            codigo: code,
+            nombre: name,
+            stays: 0,
+            totalSeconds: 0,
+            people: {},
+            activityCounts: {},
+            totalStays
+          };
+        }
+        const stat = index[key];
+        stat.stays += 1;
+        stat.totalSeconds += Number(point.seconds || point.weight || 0);
+        const personLabel = formatPersonLabel(point);
+        if (personLabel) {
+          if (!stat.people[personLabel]) {
+            stat.people[personLabel] = { label: personLabel, stays: 0, seconds: 0 };
+          }
+          stat.people[personLabel].stays += 1;
+          stat.people[personLabel].seconds += Number(point.seconds || 0);
+        }
+        const activities = point.activities && point.activities.length
+          ? point.activities
+          : (point.topActivity ? [{ name: point.topActivity, count: 1 }] : []);
+        activities.forEach((activity) => {
+          const name = activity.name || 'SIN_ACTIVIDAD';
+          stat.activityCounts[name] = (stat.activityCounts[name] || 0) + Number(activity.count || 1);
+        });
+        if (name) {
+          index[localStatsKey(floor.id, normalizeText(name))] = stat;
+        }
+      });
+    });
+    return index;
+  }
+
+  function localStatsFor(local) {
+    const codeKey = localStatsKey(local.piso, local.codigo);
+    const nameKey = localStatsKey(local.piso, normalizeText(local.nombre));
+    const raw = state.localStatsIndex[codeKey] || state.localStatsIndex[nameKey] || null;
+    const totalStays = Number(((state.data || {}).totals || {}).stays || 0);
+    if (!raw) {
+      return {
+        stays: 0,
+        visitors: 0,
+        percentage: 0,
+        totalSeconds: 0,
+        people: [],
+        extraPeople: 0,
+        activities: []
+      };
+    }
+    const people = Object.keys(raw.people)
+      .map((key) => raw.people[key])
+      .sort((a, b) => b.stays - a.stays || b.seconds - a.seconds);
+    return {
+      stays: raw.stays,
+      visitors: people.length,
+      percentage: totalStays ? (raw.stays / totalStays) * 100 : 0,
+      totalSeconds: raw.totalSeconds,
+      people: people.slice(0, 4),
+      extraPeople: Math.max(0, people.length - 4),
+      activities: activityBreakdown(raw.activityCounts).slice(0, 3)
+    };
+  }
+
+  function localStatsKey(floorId, value) {
+    return `${String(floorId || '').toUpperCase()}|${String(value || '').toUpperCase()}`;
+  }
+
+  function formatPersonLabel(point) {
+    const person = String(point.persona_id || '').trim();
+    if (!person) {
+      return '';
+    }
+    const surveyor = String(point.encuestador || '').trim();
+    return surveyor ? `${person}/${surveyor}` : person;
+  }
+
+  function activityBreakdown(counts) {
+    return Object.keys(counts || {})
+      .map((name) => ({ name, count: counts[name] }))
+      .sort((a, b) => b.count - a.count || activityLabel(a.name).localeCompare(activityLabel(b.name), 'es'));
+  }
+
+  function percentLabel(value) {
+    const number = Number(value || 0);
+    if (number <= 0) {
+      return '0%';
+    }
+    if (number < 1) {
+      return `${number.toFixed(1)}%`;
+    }
+    return `${Math.round(number)}%`;
+  }
+
   function loadDashboard() {
     if (!state.authenticated) {
       return;
@@ -462,8 +609,10 @@
     window.ZonarAPI.call('getDashboardData', {})
       .then((data) => {
         state.data = data;
+        state.localStatsIndex = buildLocalStatsIndex(data);
         state.selectedFloorId = state.selectedFloorId || firstFloorWithData(data).id;
         renderDashboard();
+        renderLocalDirectory();
         setStatus(`Actualizado ${formatDateTime(data.generatedAt)}.`);
       })
       .catch((error) => {

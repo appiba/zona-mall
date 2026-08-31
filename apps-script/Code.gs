@@ -250,8 +250,14 @@ function getDashboardData(payload) {
   permanencias.forEach((row) => {
     permanenciaById[row.permanencia_id] = row;
   });
+  const personaById = {};
+  personas.forEach((row) => {
+    if (row.persona_id) {
+      personaById[row.persona_id] = row;
+    }
+  });
 
-  const floors = maps.map((map) => buildFloorDashboard_(map, permanencias, eventos, permanenciaById));
+  const floors = maps.map((map) => buildFloorDashboard_(map, permanencias, eventos, permanenciaById, personaById));
   const totals = buildDashboardTotals_(personas, recorridos, permanencias, eventos, floors);
 
   return {
@@ -588,7 +594,7 @@ function getMapCatalog_(config) {
   ];
 }
 
-function buildFloorDashboard_(map, permanencias, eventos, permanenciaById) {
+function buildFloorDashboard_(map, permanencias, eventos, permanenciaById, personaById) {
   const floorStays = permanencias.filter((row) => row.piso === map.id);
   const floorStayIds = new Set(floorStays.map((row) => row.permanencia_id));
   const floorEvents = eventos.filter((event) => {
@@ -618,15 +624,19 @@ function buildFloorDashboard_(map, permanencias, eventos, permanenciaById) {
     heatPoints: floorStays.map((row) => {
       const activityCounts = countActivities_(eventsByStay[row.permanencia_id] || []);
       const topActivity = topEntry_(activityCounts);
+      const persona = personaById[row.persona_id] || {};
       return {
         permanencia_id: row.permanencia_id,
         persona_id: row.persona_id,
+        encuestador: persona.encuestador || '',
         x: normalizedNumber_(row.x),
         y: normalizedNumber_(row.y),
         weight: Math.max(1, Number(row.duracion_segundos || 0)),
         seconds: Number(row.duracion_segundos || 0),
         local_codigo: row.local_codigo || '',
         local_nombre: row.local_nombre || '',
+        hora_inicio: row.hora_inicio || '',
+        hora_fin: row.hora_fin || '',
         clasificacion: row.clasificacion || '',
         topActivity: topActivity ? topActivity.name : '',
         activities: activityBreakdown_(activityCounts)
