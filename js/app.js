@@ -574,6 +574,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     const type = String(location.tipo || '').toUpperCase();
     if (type === 'ZONA') return '#12664a';
     if (type === 'PARQUEADERO') return '#1769aa';
+    if (type === 'ISLA') return '#b74236';
     return '#b98218';
   }
 
@@ -581,6 +582,7 @@ const ACTIVITIES = ACTIVITY_META ? ACTIVITY_META.list() : [
     const normalized = String(type || '').toUpperCase();
     if (normalized === 'ZONA') return 'Zona';
     if (normalized === 'PARQUEADERO') return 'Parqueadero';
+    if (normalized === 'ISLA') return 'Isla';
     return 'Local';
   }
 

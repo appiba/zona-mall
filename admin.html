@@ -95,6 +95,64 @@
       </aside>
     </section>
 
+    <section class="directory-panel report-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Directorio editable</p>
+          <h2>Locales, islas y zonas</h2>
+        </div>
+        <button id="newLocalBtn" class="secondary-action" type="button">Nuevo local</button>
+      </div>
+
+      <div class="directory-tools">
+        <input id="localAdminSearch" type="search" placeholder="Buscar por nombre o codigo">
+        <select id="localFloorFilter" aria-label="Filtrar por piso"></select>
+        <select id="localCategoryFilter" aria-label="Filtrar por categoria"></select>
+      </div>
+
+      <form id="localEditorForm" class="local-editor">
+        <label>
+          Codigo / ubicacion
+          <input id="localCodeInput" type="text" placeholder="L101, 08, S01" required>
+        </label>
+        <label>
+          Nombre visible
+          <input id="localNameInput" type="text" placeholder="Nombre del local" required>
+        </label>
+        <label>
+          Piso
+          <select id="localFloorInput" required></select>
+        </label>
+        <label>
+          Categoria
+          <input id="localCategoryInput" type="text" placeholder="Moda, islas, servicios...">
+        </label>
+        <label>
+          Tipo
+          <select id="localTypeInput">
+            <option value="LOCAL">Local</option>
+            <option value="ISLA">Isla</option>
+            <option value="ZONA">Zona</option>
+            <option value="PARQUEADERO">Parqueadero</option>
+          </select>
+        </label>
+        <label>
+          Estado
+          <select id="localActiveInput">
+            <option value="SI">Activo</option>
+            <option value="NO">Inactivo</option>
+          </select>
+        </label>
+        <div class="local-editor-actions">
+          <button id="saveLocalBtn" type="submit">Guardar local</button>
+          <button id="clearLocalFormBtn" type="button">Limpiar</button>
+        </div>
+      </form>
+
+      <p id="localDirectoryStatus" class="directory-status"></p>
+      <div id="localDirectoryList" class="directory-list"></div>
+    </section>
+
     <section class="analysis-grid">
       <section>
         <div class="panel-heading compact">
@@ -138,6 +196,7 @@
     </section>
   </main>
 
+  <script src="js/directory.js"></script>
   <script src="js/config.js"></script>
   <script src="js/activity-meta.js"></script>
   <script src="js/api.js"></script>

@@ -28,9 +28,10 @@ Apps Script queda como backend/API y Google Sheets conserva la base de datos.
 - `css/`: estilos responsive para tablet, celular y escritorio.
 - `js/config.js`: configuracion central, incluyendo `apiUrl` y mapas.
 - `js/api.js`: cliente JSONP para llamar Apps Script desde GitHub Pages.
+- `js/directory.js`: directorio base de locales, islas, zonas y parqueaderos.
 - `js/activity-meta.js`: catalogo visual de actividades y colores.
 - `js/app.js`: trazado, permanencias, actividades, cambio de piso y guardado.
-- `js/admin.js`: analisis por planta y parqueadero desde `PERMANENCIAS`.
+- `js/admin.js`: analisis por planta y parqueadero, mapas de calor y editor del directorio.
 - `assets/maps/`: mapas reales usados como capas base.
 - `apps-script/Code.gs`: backend/API para Google Sheets.
 - `data/`: archivos base para directorios y simbologia sin inventar datos.
@@ -82,3 +83,5 @@ La primera version mantiene:
 - guardado progresivo con cola local temporal.
 
 El panel administrativo usa `PERMANENCIAS` para mapas de calor, rankings y conclusiones. Las rutas no se usan para generar zonas calientes. Los puntos calientes se colorean por actividad principal para distinguir compras, preguntas, vitrina, consumo, espera y otros motivos.
+
+El directorio editable permite buscar, agregar, cambiar nombre, categoria, piso, tipo y estado de locales. Los nombres base se cargan desde `js/directory.js`; cuando Apps Script esta actualizado, los cambios del administrador se guardan en la hoja `LOCALES` y tienen prioridad sobre el directorio base.

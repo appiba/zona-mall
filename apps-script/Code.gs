@@ -162,6 +162,8 @@ function dispatchApiAction_(action, payload) {
     recordFloorChange: () => recordFloorChange(payload),
     finalizePerson: () => finalizePerson(payload),
     cancelPerson: () => cancelPerson(payload),
+    getLocalDirectory: () => getLocalDirectory(),
+    saveLocal: () => saveLocal(payload),
     getDashboardData: () => getDashboardData(payload),
     getMapData: () => getMapData(payload),
     syncMapFileIdsByName: () => syncMapFileIdsByName(),
@@ -202,6 +204,25 @@ function initApp() {
     simbologia: getActiveRows_('SIMBOLOGIA'),
     nextPersonaId: peekNextPersonaId_()
   };
+}
+
+function getLocalDirectory() {
+  ensureDatabase();
+  return getRows_('LOCALES').map((row) => ({
+    codigo: String(row.codigo || '').trim(),
+    nombre: String(row.nombre || '').trim(),
+    categoria: String(row.categoria || '').trim(),
+    piso: String(row.piso || '').trim(),
+    tipo: String(row.tipo || 'LOCAL').trim(),
+    activo: String(row.activo || 'SI').trim().toUpperCase() === 'NO' ? 'NO' : 'SI'
+  })).filter((row) => row.codigo && row.piso);
+}
+
+function saveLocal(payload) {
+  ensureDatabase();
+  const local = normalizeLocalPayload_(payload);
+  upsertLocal_(local);
+  return local;
 }
 
 function getDashboardData(payload) {
@@ -875,6 +896,41 @@ function appendValues_(sheetName, values) {
   const sheet = getSpreadsheet_().getSheetByName(sheetName);
   const startRow = sheet.getLastRow() + 1;
   sheet.getRange(startRow, 1, values.length, values[0].length).setValues(values);
+}
+
+function normalizeLocalPayload_(payload) {
+  const local = {
+    codigo: String(payload && payload.codigo || '').trim().toUpperCase(),
+    nombre: String(payload && payload.nombre || '').trim(),
+    categoria: String(payload && payload.categoria || '').trim(),
+    piso: String(payload && payload.piso || '').trim(),
+    tipo: String(payload && payload.tipo || 'LOCAL').trim().toUpperCase(),
+    activo: String(payload && payload.activo || 'SI').trim().toUpperCase() === 'NO' ? 'NO' : 'SI'
+  };
+  if (!local.codigo || !local.nombre || !local.piso) {
+    throw new Error('codigo, nombre y piso son requeridos para guardar el local');
+  }
+  return local;
+}
+
+function upsertLocal_(local) {
+  const sheet = getSpreadsheet_().getSheetByName('LOCALES');
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0] || SHEET_DEFINITIONS.LOCALES;
+  const codeIndex = headers.indexOf('codigo');
+  const floorIndex = headers.indexOf('piso');
+  const rowValues = SHEET_DEFINITIONS.LOCALES.map((header) => local[header] || '');
+  for (let rowIndex = values.length - 1; rowIndex >= 1; rowIndex -= 1) {
+    if (
+      String(values[rowIndex][codeIndex]).trim().toUpperCase() === local.codigo &&
+      String(values[rowIndex][floorIndex]).trim() === local.piso
+    ) {
+      sheet.getRange(rowIndex + 1, 1, 1, rowValues.length).setValues([rowValues]);
+      return true;
+    }
+  }
+  appendValues_('LOCALES', [rowValues]);
+  return true;
 }
 
 function updateRowByKey_(sheetName, keyHeader, keyValue, updates) {

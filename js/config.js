@@ -1,3 +1,5 @@
+const ZONAR_DIRECTORY_DEFAULTS = window.ZonarDirectoryDefaults || [];
+
 window.ZonarConfig = {
   apiUrl: 'https://script.google.com/macros/s/AKfycbw8vu2lMM5WRrU7vK-p78rIlx5OKpgdm5_rnOyNVxiEFE_YhzPt2k2rnBq8p36AIpnx/exec',
   maps: [
@@ -27,7 +29,7 @@ window.ZonarConfig = {
       src: 'assets/maps/parqueadero-subsuelo.png'
     }
   ],
-  knownLocations: [
+  knownLocations: ZONAR_DIRECTORY_DEFAULTS.length ? ZONAR_DIRECTORY_DEFAULTS : [
     { codigo: 'L03', nombre: 'Local L03', piso: 'PLANTA_BAJA', tipo: 'LOCAL' },
     { codigo: 'L07', nombre: 'Local L07', piso: 'PLANTA_BAJA', tipo: 'LOCAL' },
     { codigo: 'L08', nombre: 'Local L08', piso: 'PLANTA_BAJA', tipo: 'LOCAL' },
@@ -126,7 +128,10 @@ window.ZonarConfig = {
       { codigo: 'L10', x: 0.94, y: 0.50, radius: 0.08 },
       { codigo: 'L11', x: 0.60, y: 0.20, radius: 0.10 },
       { codigo: 'L12', x: 0.48, y: 0.38, radius: 0.05 },
-      { codigo: 'L15', x: 0.92, y: 0.66, radius: 0.06 }
+      { codigo: 'L15', x: 0.92, y: 0.66, radius: 0.06 },
+      { codigo: '01', x: 0.77, y: 0.66, radius: 0.025 },
+      { codigo: '02', x: 0.80, y: 0.66, radius: 0.025 },
+      { codigo: '03', x: 0.83, y: 0.66, radius: 0.025 }
     ],
     PISO_1: [
       { codigo: 'EVENTOS', x: 0.35, y: 0.49, radius: 0.11 },
@@ -158,7 +163,26 @@ window.ZonarConfig = {
       { codigo: 'L128', x: 0.71, y: 0.67, radius: 0.04 },
       { codigo: 'L127', x: 0.77, y: 0.67, radius: 0.04 },
       { codigo: 'L220', x: 0.83, y: 0.67, radius: 0.04 },
-      { codigo: 'L251', x: 0.94, y: 0.58, radius: 0.055 }
+      { codigo: 'L251', x: 0.94, y: 0.58, radius: 0.055 },
+      { codigo: '04', x: 0.84, y: 0.31, radius: 0.025 },
+      { codigo: '05', x: 0.90, y: 0.61, radius: 0.025 },
+      { codigo: '06', x: 0.88, y: 0.62, radius: 0.025 },
+      { codigo: '07', x: 0.85, y: 0.62, radius: 0.025 },
+      { codigo: '08', x: 0.82, y: 0.62, radius: 0.025 },
+      { codigo: '09', x: 0.79, y: 0.62, radius: 0.025 },
+      { codigo: '10', x: 0.76, y: 0.62, radius: 0.025 },
+      { codigo: '11', x: 0.72, y: 0.62, radius: 0.025 },
+      { codigo: '12', x: 0.68, y: 0.62, radius: 0.025 },
+      { codigo: '13', x: 0.63, y: 0.62, radius: 0.025 },
+      { codigo: '14', x: 0.58, y: 0.62, radius: 0.025 },
+      { codigo: '15', x: 0.52, y: 0.62, radius: 0.025 },
+      { codigo: '16', x: 0.84, y: 0.39, radius: 0.028 },
+      { codigo: '17', x: 0.41, y: 0.62, radius: 0.025 },
+      { codigo: '18', x: 0.44, y: 0.58, radius: 0.025 },
+      { codigo: '19', x: 0.41, y: 0.58, radius: 0.025 },
+      { codigo: '20', x: 0.91, y: 0.57, radius: 0.025 },
+      { codigo: '21', x: 0.93, y: 0.65, radius: 0.025 },
+      { codigo: '22', x: 0.84, y: 0.52, radius: 0.025 }
     ],
     PISO_2: [
       { codigo: 'PATIO_COMIDAS', x: 0.23, y: 0.58, radius: 0.12 },
@@ -199,7 +223,22 @@ window.ZonarConfig = {
       { codigo: 'L238A', x: 0.45, y: 0.52, radius: 0.04 },
       { codigo: 'L239', x: 0.48, y: 0.58, radius: 0.06 },
       { codigo: 'L241', x: 0.39, y: 0.30, radius: 0.04 },
-      { codigo: 'L263', x: 0.94, y: 0.61, radius: 0.045 }
+      { codigo: 'L263', x: 0.94, y: 0.61, radius: 0.045 },
+      { codigo: '22', x: 0.85, y: 0.55, radius: 0.025 },
+      { codigo: '23', x: 0.86, y: 0.64, radius: 0.025 },
+      { codigo: '24', x: 0.83, y: 0.64, radius: 0.025 },
+      { codigo: '25', x: 0.80, y: 0.64, radius: 0.025 },
+      { codigo: '26', x: 0.76, y: 0.64, radius: 0.025 },
+      { codigo: '27', x: 0.22, y: 0.58, radius: 0.035 },
+      { codigo: '28', x: 0.42, y: 0.58, radius: 0.025 },
+      { codigo: '29', x: 0.41, y: 0.53, radius: 0.025 },
+      { codigo: '30', x: 0.39, y: 0.49, radius: 0.025 },
+      { codigo: '31', x: 0.64, y: 0.41, radius: 0.025 },
+      { codigo: '32', x: 0.30, y: 0.58, radius: 0.025 },
+      { codigo: '33', x: 0.30, y: 0.62, radius: 0.025 },
+      { codigo: '34', x: 0.90, y: 0.61, radius: 0.025 },
+      { codigo: '35', x: 0.39, y: 0.62, radius: 0.025 },
+      { codigo: '36', x: 0.85, y: 0.43, radius: 0.025 }
     ],
     PARQUEADERO_PB: [
       { codigo: 'PARQUEADERO_PB', x: 0.50, y: 0.52, radius: 0.28 },

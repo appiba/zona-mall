@@ -9,7 +9,13 @@
   const state = {
     data: null,
     selectedFloorId: null,
-    authenticated: false
+    authenticated: false,
+    localDirectory: [],
+    localFilters: {
+      search: '',
+      floor: '',
+      category: ''
+    }
   };
 
   const els = {};
@@ -44,7 +50,22 @@
       'adminUserInput',
       'adminPassInput',
       'loginError',
-      'loginSubmitBtn'
+      'loginSubmitBtn',
+      'newLocalBtn',
+      'localAdminSearch',
+      'localFloorFilter',
+      'localCategoryFilter',
+      'localEditorForm',
+      'localCodeInput',
+      'localNameInput',
+      'localFloorInput',
+      'localCategoryInput',
+      'localTypeInput',
+      'localActiveInput',
+      'saveLocalBtn',
+      'clearLocalFormBtn',
+      'localDirectoryStatus',
+      'localDirectoryList'
     ].forEach((id) => {
       els[id] = document.getElementById(id);
     });
@@ -54,7 +75,23 @@
     els.refreshBtn.addEventListener('click', loadDashboard);
     els.printBtn.addEventListener('click', () => window.print());
     els.adminMapImage.addEventListener('load', renderHeatmap);
+    els.newLocalBtn.addEventListener('click', clearLocalForm);
+    els.clearLocalFormBtn.addEventListener('click', clearLocalForm);
+    els.localEditorForm.addEventListener('submit', saveLocalEntry);
+    els.localAdminSearch.addEventListener('input', () => {
+      state.localFilters.search = els.localAdminSearch.value;
+      renderLocalDirectory();
+    });
+    els.localFloorFilter.addEventListener('change', () => {
+      state.localFilters.floor = els.localFloorFilter.value;
+      renderLocalDirectory();
+    });
+    els.localCategoryFilter.addEventListener('change', () => {
+      state.localFilters.category = els.localCategoryFilter.value;
+      renderLocalDirectory();
+    });
     window.addEventListener('resize', renderHeatmap);
+    renderLocalEditorOptions();
     if (hasValidAdminSession()) {
       unlockAdmin();
     } else {
@@ -114,6 +151,7 @@
     els.adminShell.classList.remove('hidden');
     els.adminShell.removeAttribute('aria-hidden');
     loadDashboard();
+    loadLocalDirectory();
   }
 
   function showLogin(clearSession) {
@@ -147,6 +185,273 @@
 
   function setLoginError(message) {
     els.loginError.textContent = message;
+  }
+
+  function loadLocalDirectory() {
+    setDirectoryStatus('Cargando directorio de locales...');
+    window.ZonarAPI.call('getLocalDirectory', {})
+      .then((rows) => {
+        state.localDirectory = mergeLocalDirectory(rows || [], localDefaults());
+        renderLocalDirectory();
+        clearLocalForm();
+        setDirectoryStatus(`${state.localDirectory.length} registros listos para editar.`);
+      })
+      .catch((error) => {
+        console.error(error);
+        state.localDirectory = mergeLocalDirectory([], localDefaults());
+        renderLocalDirectory();
+        clearLocalForm();
+        setDirectoryStatus('Mostrando el directorio base. Actualiza Apps Script para guardar cambios en Google Sheets.', true);
+      });
+  }
+
+  function renderLocalEditorOptions() {
+    const floors = window.ZonarConfig.maps || [];
+    const options = floors.map((floor) => `<option value="${escapeHtml(floor.id)}">${escapeHtml(floor.label)}</option>`).join('');
+    els.localFloorInput.innerHTML = options;
+    els.localFloorFilter.innerHTML = `<option value="">Todos los pisos</option>${options}`;
+    els.localCategoryFilter.innerHTML = '<option value="">Todas las categorias</option>';
+  }
+
+  function renderLocalFilterOptions() {
+    const currentFloor = els.localFloorFilter.value;
+    const currentCategory = els.localCategoryFilter.value;
+    const floors = window.ZonarConfig.maps || [];
+    els.localFloorFilter.innerHTML = '<option value="">Todos los pisos</option>';
+    floors.forEach((floor) => {
+      const option = document.createElement('option');
+      option.value = floor.id;
+      option.textContent = floor.label;
+      els.localFloorFilter.append(option);
+    });
+    els.localFloorFilter.value = currentFloor;
+
+    const categories = uniqueValues(state.localDirectory.map((local) => local.categoria).filter(Boolean));
+    els.localCategoryFilter.innerHTML = '<option value="">Todas las categorias</option>';
+    categories.forEach((category) => {
+      const option = document.createElement('option');
+      option.value = category;
+      option.textContent = category;
+      els.localCategoryFilter.append(option);
+    });
+    els.localCategoryFilter.value = currentCategory;
+  }
+
+  function renderLocalDirectory() {
+    renderLocalFilterOptions();
+    els.localDirectoryList.innerHTML = '';
+    const rows = filteredLocalDirectory();
+    if (!rows.length) {
+      els.localDirectoryList.innerHTML = '<div class="empty-state">No hay locales con esos filtros.</div>';
+      return;
+    }
+    rows.forEach((local) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'directory-item';
+      button.classList.toggle('inactive', String(local.activo || 'SI').toUpperCase() === 'NO');
+      button.style.setProperty('--directory-color', localTypeColor(local.tipo));
+      button.title = `Editar ${local.nombre || local.codigo}`;
+
+      const code = document.createElement('b');
+      code.className = 'directory-code';
+      code.textContent = local.codigo || 'S/C';
+
+      const text = document.createElement('div');
+      const name = document.createElement('strong');
+      name.textContent = local.nombre || 'Sin nombre';
+      const meta = document.createElement('span');
+      meta.textContent = `${floorLabel(local.piso)} · ${local.categoria || localTypeLabel(local.tipo)} · ${localTypeLabel(local.tipo)}`;
+      text.append(name, meta);
+
+      button.append(code, text);
+      button.addEventListener('click', () => fillLocalForm(local));
+      els.localDirectoryList.append(button);
+    });
+  }
+
+  function filteredLocalDirectory() {
+    const term = normalizeText(state.localFilters.search);
+    return state.localDirectory
+      .filter((local) => !state.localFilters.floor || local.piso === state.localFilters.floor)
+      .filter((local) => !state.localFilters.category || local.categoria === state.localFilters.category)
+      .filter((local) => {
+        if (!term) {
+          return true;
+        }
+        return normalizeText(`${local.codigo} ${local.nombre} ${local.categoria} ${local.tipo} ${floorLabel(local.piso)}`).includes(term);
+      })
+      .sort(compareLocals);
+  }
+
+  function fillLocalForm(local) {
+    els.localCodeInput.value = local.codigo || '';
+    els.localNameInput.value = local.nombre || '';
+    els.localFloorInput.value = local.piso || ((window.ZonarConfig.maps || [])[0] || {}).id || '';
+    els.localCategoryInput.value = local.categoria || '';
+    els.localTypeInput.value = local.tipo || 'LOCAL';
+    els.localActiveInput.value = String(local.activo || 'SI').toUpperCase() === 'NO' ? 'NO' : 'SI';
+    setDirectoryStatus(`Editando ${local.nombre || local.codigo}. Cambia el nombre y guarda.`);
+  }
+
+  function clearLocalForm() {
+    els.localEditorForm.reset();
+    els.localTypeInput.value = 'LOCAL';
+    els.localActiveInput.value = 'SI';
+    els.localFloorInput.value = state.localFilters.floor || ((window.ZonarConfig.maps || [])[0] || {}).id || '';
+    setDirectoryStatus('Puedes editar un registro de la lista o crear uno nuevo.');
+  }
+
+  function saveLocalEntry(event) {
+    event.preventDefault();
+    const payload = {
+      codigo: String(els.localCodeInput.value || '').trim().toUpperCase(),
+      nombre: String(els.localNameInput.value || '').trim(),
+      categoria: String(els.localCategoryInput.value || '').trim(),
+      piso: els.localFloorInput.value,
+      tipo: els.localTypeInput.value,
+      activo: els.localActiveInput.value
+    };
+    if (!payload.codigo || !payload.nombre || !payload.piso) {
+      setDirectoryStatus('Codigo, nombre y piso son obligatorios.', true);
+      return;
+    }
+    els.saveLocalBtn.disabled = true;
+    els.saveLocalBtn.textContent = 'Guardando...';
+    window.ZonarAPI.call('saveLocal', payload)
+      .then((saved) => {
+        upsertLocal(saved || payload, 'SHEETS');
+        renderLocalDirectory();
+        fillLocalForm(saved || payload);
+        setDirectoryStatus(`${payload.codigo} guardado. El cambio queda disponible para nuevas capturas.`);
+      })
+      .catch((error) => {
+        console.error(error);
+        setDirectoryStatus('No se pudo guardar. Actualiza Apps Script con el Code.gs nuevo y revisa permisos.', true);
+      })
+      .finally(() => {
+        els.saveLocalBtn.disabled = false;
+        els.saveLocalBtn.textContent = 'Guardar local';
+      });
+  }
+
+  function mergeLocalDirectory(rows, defaults) {
+    const index = new Map();
+    (defaults || []).forEach((row) => {
+      const local = normalizeLocal(row, 'BASE');
+      if (local) {
+        index.set(localKey(local), local);
+      }
+    });
+    (rows || []).forEach((row) => {
+      const local = normalizeLocal(row, 'SHEETS');
+      if (local) {
+        index.set(localKey(local), local);
+      }
+    });
+    return Array.from(index.values()).sort(compareLocals);
+  }
+
+  function upsertLocal(row, source) {
+    const local = normalizeLocal(row, source || 'SHEETS');
+    if (!local) {
+      return;
+    }
+    const key = localKey(local);
+    const next = state.localDirectory.filter((item) => localKey(item) !== key);
+    next.push(local);
+    state.localDirectory = next.sort(compareLocals);
+  }
+
+  function normalizeLocal(row, source) {
+    const codigo = String(row.codigo || '').trim().toUpperCase();
+    const nombre = String(row.nombre || '').trim();
+    const piso = String(row.piso || '').trim();
+    if (!codigo || !piso) {
+      return null;
+    }
+    return {
+      codigo,
+      nombre: nombre || codigo,
+      categoria: String(row.categoria || '').trim(),
+      piso,
+      tipo: String(row.tipo || 'LOCAL').trim().toUpperCase(),
+      activo: String(row.activo || 'SI').trim().toUpperCase() === 'NO' ? 'NO' : 'SI',
+      source
+    };
+  }
+
+  function localDefaults() {
+    return window.ZonarDirectoryDefaults || window.ZonarConfig.knownLocations || [];
+  }
+
+  function localKey(local) {
+    return `${String(local.piso || '').toUpperCase()}|${String(local.codigo || '').toUpperCase()}`;
+  }
+
+  function compareLocals(a, b) {
+    const floorDiff = floorSortWeight(a.piso) - floorSortWeight(b.piso);
+    if (floorDiff !== 0) {
+      return floorDiff;
+    }
+    const typeDiff = localTypeWeight(a.tipo) - localTypeWeight(b.tipo);
+    if (typeDiff !== 0) {
+      return typeDiff;
+    }
+    return String(a.codigo || a.nombre).localeCompare(String(b.codigo || b.nombre), 'es', { numeric: true });
+  }
+
+  function floorSortWeight(floorId) {
+    const index = (window.ZonarConfig.maps || []).findIndex((floor) => floor.id === floorId);
+    return index === -1 ? 999 : index;
+  }
+
+  function localTypeWeight(type) {
+    const normalized = String(type || '').toUpperCase();
+    if (normalized === 'ZONA') return 0;
+    if (normalized === 'LOCAL') return 1;
+    if (normalized === 'ISLA') return 2;
+    if (normalized === 'PARQUEADERO') return 3;
+    return 4;
+  }
+
+  function floorLabel(floorId) {
+    const floor = (window.ZonarConfig.maps || []).find((item) => item.id === floorId);
+    return floor ? floor.label : floorId || 'Sin piso';
+  }
+
+  function localTypeLabel(type) {
+    const normalized = String(type || '').toUpperCase();
+    if (normalized === 'ISLA') return 'Isla';
+    if (normalized === 'ZONA') return 'Zona';
+    if (normalized === 'PARQUEADERO') return 'Parqueadero';
+    return 'Local';
+  }
+
+  function localTypeColor(type) {
+    const normalized = String(type || '').toUpperCase();
+    if (normalized === 'ISLA') return '#b64135';
+    if (normalized === 'ZONA') return '#12664a';
+    if (normalized === 'PARQUEADERO') return '#1769aa';
+    return '#b8831f';
+  }
+
+  function uniqueValues(values) {
+    return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, 'es'));
+  }
+
+  function normalizeText(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function setDirectoryStatus(message, isError) {
+    els.localDirectoryStatus.textContent = message || '';
+    els.localDirectoryStatus.classList.toggle('error', Boolean(isError));
   }
 
   function loadDashboard() {
